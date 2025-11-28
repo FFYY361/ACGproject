@@ -246,7 +246,7 @@ void Application::OnInit() {
     {
         auto green_sphere = std::make_shared<Entity>(
             "meshes/octahedron.obj",
-            Material(glm::vec3(0.2f, 1.0f, 0.2f), 0.2f, 0.8f),
+            Material(glm::vec3(0.2f, 1.0f, 0.2f), 0.0f, 1.0f),
             glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f))
         );
         scene_->AddEntity(green_sphere);
@@ -311,9 +311,14 @@ void Application::OnInit() {
     core_->CreateImage(window_->GetWidth(), window_->GetHeight(), grassland::graphics::IMAGE_FORMAT_R32_SINT,
         &entity_id_image_);
 
-    core_->CreateShader(GetShaderCode("shaders/shader.hlsl"), "RayGenMain", "lib_6_3", &raygen_shader_);
-    core_->CreateShader(GetShaderCode("shaders/shader.hlsl"), "MissMain", "lib_6_3", &miss_shader_);
-    core_->CreateShader(GetShaderCode("shaders/shader.hlsl"), "ClosestHitMain", "lib_6_3", &closest_hit_shader_);
+	grassland::LogInfo("Current Work Directory: {}", std::filesystem::current_path().string());
+
+    auto shader_vfs = grassland::VirtualFileSystem::LoadDirectory(SHADERS_DIR);
+    //E:/2025-2026F/AdvancedComputerGraphics/project/ACGproject/src/shaders
+
+    core_->CreateShader(shader_vfs, "shader.hlsl", "RayGenMain", "lib_6_3", &raygen_shader_);
+    core_->CreateShader(shader_vfs, "shader.hlsl", "MissMain", "lib_6_3", &miss_shader_);
+    core_->CreateShader(shader_vfs, "shader.hlsl", "ClosestHitMain", "lib_6_3", &closest_hit_shader_);
     grassland::LogInfo("Shader compiled successfully");
 
     core_->CreateRayTracingProgram(raygen_shader_.get(), miss_shader_.get(), closest_hit_shader_.get(), &program_);
