@@ -61,7 +61,8 @@ void Scene::BuildAccelerationStructures() {
     grassland::LogInfo("Built TLAS with {} instances", instances.size());
 
     // Update materials buffer
-    UpdateMaterialsBuffer();
+    //UpdateMaterialsBuffer();
+	UpdateBuffers();
 }
 
 void Scene::UpdateInstances() {
@@ -94,29 +95,149 @@ void Scene::UpdateInstances() {
     tlas_->UpdateInstances(instances);
 }
 
-void Scene::UpdateMaterialsBuffer() {
+//void Scene::UpdateMaterialsBuffer() {
+//    if (entities_.empty()) {
+//        return;
+//    }
+//
+//    // Collect all materials
+//    std::vector<Material> materials;
+//    materials.reserve(entities_.size());
+//
+//    for (const auto& entity : entities_) {
+//        materials.push_back(entity->GetMaterial());
+//    }
+//
+//    // Create/update materials buffer
+//    size_t buffer_size = materials.size() * sizeof(Material);
+//    
+//    if (!materials_buffer_) {
+//        core_->CreateBuffer(buffer_size, 
+//                          grassland::graphics::BUFFER_TYPE_DYNAMIC, 
+//                          &materials_buffer_);
+//    }
+//    
+//    materials_buffer_->UploadData(materials.data(), buffer_size);
+//    grassland::LogInfo("Updated materials buffer with {} materials", materials.size());
+//}
+
+
+void Scene::UpdateBuffers() {
     if (entities_.empty()) {
         return;
     }
-
-    // Collect all materials
+	// Collect all materials, entity infos
     std::vector<Material> materials;
-    materials.reserve(entities_.size());
+	materials.reserve(entities_.size());
+	std::vector<EntityInfo> entity_infos;
+	entity_infos.reserve(entities_.size());
 
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    uint32_t vertex_buffer_offset = 0;
+    uint32_t index_buffer_offset = 0;
+    uint32_t material_offset = 0;
     for (const auto& entity : entities_) {
+        EntityInfo info{};
+        info.vertexBufferOffset = vertex_buffer_offset;
+        info.indexBufferOffset = index_buffer_offset;
+        info.materialOffset = material_offset;
+        info.objectToWorld = entity->GetTransform();
+        info.worldToObject = glm::inverse(entity->GetTransform());
+
+
         materials.push_back(entity->GetMaterial());
+        entity_infos.push_back(info);
+
+        // Append vertex data
+        const auto& mesh = entity->GetMesh();
+        uint32_t num_vertices = mesh.NumVertices();
+        uint32_t num_indices = mesh.NumIndices();
+        for (uint32_t v = 0; v < num_vertices; ++v) {
+            Vertex vert{};
+            grassland::Vector3<float> pos = mesh.Positions()[v];
+            //const auto pos = mesh.Positions()[v];
+            vert.pos = glm::vec3(pos[0], pos[1], pos[2]);
+            grassland::Vector3<float> norm = mesh.Normals() ? mesh.Normals()[v] : grassland::Vector3<float>{ 0.0f, 0.0f, 0.0f };
+            vert.normal = glm::vec3(norm[0], norm[1], norm[2]);
+            //vert.normal = mesh.Normals() ? mesh.Normals()[v] : glm::vec3(0.0f, 0.0f, 0.0f);
+            vertices.push_back(vert);
+        }
+        // Append index data (with offset)
+        for (uint32_t idx = 0; idx < num_indices; ++idx) {
+            indices.push_back(mesh.Indices()[idx]);
+        }
+        vertex_buffer_offset += num_vertices;
+        index_buffer_offset += num_indices;
     }
 
-    // Create/update materials buffer
-    size_t buffer_size = materials.size() * sizeof(Material);
-    
+    EntityInfo debug_info = entity_infos[0];/*
+    grassland::LogInfo("First entity info: vertexOffset={}, indexOffset={}, materialOffset={}, objectToWorld={}",
+        debug_info.vertexBufferOffset,
+        debug_info.indexBufferOffset,
+		debug_info.materialOffset);*/
+    grassland::LogInfo("objectToWorld matrix first row: [{}, {}, {}, {}]",
+        debug_info.objectToWorld[0][0],
+        debug_info.objectToWorld[0][1],
+        debug_info.objectToWorld[0][2],
+		debug_info.objectToWorld[0][3]);
+    grassland::LogInfo("objectToWorld matrix second row: [{}, {}, {}, {}]",
+        debug_info.objectToWorld[1][0],
+        debug_info.objectToWorld[1][1],
+        debug_info.objectToWorld[1][2],
+        debug_info.objectToWorld[1][3]);
+    grassland::LogInfo("objectToWorld matrix third row: [{}, {}, {}, {}]",
+        debug_info.objectToWorld[2][0],
+        debug_info.objectToWorld[2][1],
+        debug_info.objectToWorld[2][2],
+		debug_info.objectToWorld[2][3]);
+    grassland::LogInfo("objectToWorld matrix fourth row: [{}, {}, {}, {}]",
+        debug_info.objectToWorld[3][0],
+        debug_info.objectToWorld[3][1],
+		debug_info.objectToWorld[3][2],
+		debug_info.objectToWorld[3][3]);
+
+
+
+	// Create/update materials buffer
+	size_t materials_buffer_size = materials.size() * sizeof(Material);
     if (!materials_buffer_) {
-        core_->CreateBuffer(buffer_size, 
-                          grassland::graphics::BUFFER_TYPE_DYNAMIC, 
+        core_->CreateBuffer(materials_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
                           &materials_buffer_);
-    }
-    
-    materials_buffer_->UploadData(materials.data(), buffer_size);
-    grassland::LogInfo("Updated materials buffer with {} materials", materials.size());
-}
+	}
+    materials_buffer_->UploadData(materials.data(), materials_buffer_size);
+	grassland::LogInfo("Updated materials buffer with {} materials", materials.size());
 
+	// Create/update info buffer
+	size_t entity_info_buffer_size = entity_infos.size() * sizeof(EntityInfo);
+    if (!entity_info_buffer_) {
+        core_->CreateBuffer(entity_info_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &entity_info_buffer_);
+    }
+	entity_info_buffer_->UploadData(entity_infos.data(), entity_info_buffer_size);
+    grassland::LogInfo("Updated entity info buffer with {} entries, each of size {}", entity_infos.size(), sizeof(EntityInfo));
+
+    // Create/update vertex buffer
+    size_t vertices_buffer_size = vertices.size() * sizeof(Vertex);
+    if (!vertices_buffer_) {
+        core_->CreateBuffer(vertices_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &vertices_buffer_);
+    }
+    vertices_buffer_->UploadData(vertices.data(), vertices_buffer_size);
+    grassland::LogInfo("Updated vertex buffer with {} vertices, each of size {}", vertices.size(), sizeof(Vertex));
+
+    // Create/update index buffer
+    size_t indices_buffer_size = indices.size() * sizeof(uint32_t);
+    if (!indices_buffer_) {
+        core_->CreateBuffer(indices_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &indices_buffer_);
+    }
+    indices_buffer_->UploadData(indices.data(), indices_buffer_size);
+	grassland::LogInfo("Updated index buffer with {} indices, each of size {}", indices.size(), sizeof(uint32_t));
+
+}

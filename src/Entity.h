@@ -21,6 +21,8 @@ public:
     const glm::mat4& GetTransform() const { return transform_; }
     grassland::graphics::AccelerationStructure* GetBLAS() const { return blas_.get(); }
 
+	grassland::Mesh<float>& GetMesh() { return mesh_; }
+
     // Setters
     void SetMaterial(const Material& material) { material_ = material; }
     void SetTransform(const glm::mat4& transform) { transform_ = transform; }

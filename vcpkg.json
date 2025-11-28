@@ -17,6 +17,7 @@
     {
       "name": "d3dx12",
       "platform": "windows"
-    }
+    },
+    "directx-dxc"
   ]
 }
