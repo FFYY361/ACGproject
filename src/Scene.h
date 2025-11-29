@@ -18,6 +18,27 @@ struct Vertex {
     glm::vec3 normal;
 };
 
+struct Light
+{
+    bool type; // 0: Point, 1: Area
+    glm::vec3 position; // Point light position or Area light center
+    glm::vec3 color; // Light intensity/color (e.g., float3(10, 10, 10))
+
+    // Area light specifics
+    glm::vec3 u; // Area light edge vector U
+    glm::vec3 v; // Area light edge vector V
+    float area; // Surface area
+
+	Light() : type(0), position(0.0f), color(1.0f), u(0.0f), v(0.0f), area(0.0f) {}
+};
+
+struct LightInfo
+{
+    int num_light;
+    
+	LightInfo() : num_light(0) {}
+};
+
 // Scene manages a collection of entities and builds the TLAS
 class Scene {
 public:
@@ -26,6 +47,7 @@ public:
 
     // Add an entity to the scene
     void AddEntity(std::shared_ptr<Entity> entity);
+    void AddLight(std::shared_ptr<Light> light);
 
     // Remove all entities
     void Clear();
@@ -44,6 +66,8 @@ public:
 	grassland::graphics::Buffer* GetVerticesBuffer() const { return vertices_buffer_.get(); }
 	grassland::graphics::Buffer* GetIndicesBuffer() const { return indices_buffer_.get(); }
 	grassland::graphics::Buffer* GetEntityInfoBuffer() const { return entity_info_buffer_.get(); }
+	grassland::graphics::Buffer* GetLightsBuffer() const { return lights_buffer_.get(); }
+	grassland::graphics::Buffer* GetLightInfoBuffer() const { return light_info_buffer_.get(); }
 
     // Get all entities
     const std::vector<std::shared_ptr<Entity>>& GetEntities() const { return entities_; }
@@ -57,11 +81,15 @@ private:
 
     grassland::graphics::Core* core_;
     std::vector<std::shared_ptr<Entity>> entities_;
+	std::vector<Light> lights_;
+	LightInfo light_info_;
     std::unique_ptr<grassland::graphics::AccelerationStructure> tlas_;
     std::unique_ptr<grassland::graphics::Buffer> materials_buffer_;
     std::unique_ptr<grassland::graphics::Buffer> vertices_buffer_;
     std::unique_ptr<grassland::graphics::Buffer> indices_buffer_;
     std::unique_ptr<grassland::graphics::Buffer> entity_info_buffer_;
+	std::unique_ptr<grassland::graphics::Buffer> light_info_buffer_;
+	std::unique_ptr<grassland::graphics::Buffer> lights_buffer_;
 
 };
 

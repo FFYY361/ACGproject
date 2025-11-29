@@ -246,7 +246,7 @@ void Application::OnInit() {
     {
         auto green_sphere = std::make_shared<Entity>(
             "meshes/octahedron.obj",
-            Material(glm::vec3(0.2f, 1.0f, 0.2f), 0.0f, 1.0f),
+            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.9f),
             glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f))
         );
         scene_->AddEntity(green_sphere);
@@ -324,7 +324,7 @@ void Application::OnInit() {
     core_->CreateRayTracingProgram(raygen_shader_.get(), miss_shader_.get(), closest_hit_shader_.get(), &program_);
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_ACCELERATION_STRUCTURE, 1);  // space0
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_WRITABLE_IMAGE, 1);          // space1 - color output
-    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space2
+	program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space2 - camera
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space3 - materials
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space4 - hover info
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_WRITABLE_IMAGE, 1);          // space5 - entity ID output
@@ -333,6 +333,8 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space8 - entityinfo
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space9 - vertices
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space10 - indices
+	program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space11 - lightinfo
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space12 - lights
     program_->Finalize();
 }
 
@@ -805,6 +807,8 @@ void Application::OnRender() {
     command_context->CmdBindResources(8, { scene_->GetEntityInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
     command_context->CmdBindResources(9, { scene_->GetVerticesBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
     command_context->CmdBindResources(10,{ scene_->GetIndicesBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(11,{ scene_->GetLightInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(12,{ scene_->GetLightsBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
     command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);
     

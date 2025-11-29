@@ -1,4 +1,5 @@
 #include "Scene.h"
+#include "glm/gtc/matrix_transform.hpp"
 
 Scene::Scene(grassland::graphics::Core* core)
     : core_(core) {
@@ -21,10 +22,33 @@ void Scene::AddEntity(std::shared_ptr<Entity> entity) {
     grassland::LogInfo("Added entity to scene (total: {})", entities_.size());
 }
 
+void Scene::AddLight(std::shared_ptr<Light> light) {
+    if (!light) {
+        grassland::LogError("Cannot add invalid light to scene");
+        return;
+    }
+    lights_.push_back(*light);
+    if (light->type == 0) { // Point light
+        auto point_sphere = std::make_shared<Entity>(
+            "meshes/sphere.obj",
+            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.0f, 0.0f, light->color),
+			glm::scale(glm::translate(glm::mat4(1.0f), light->position), glm::vec3(0.1f))
+        );
+        AddEntity(point_sphere);
+	}
+    grassland::LogInfo("Added light to scene (total: {})", lights_.size());
+}
+
 void Scene::Clear() {
     entities_.clear();
     tlas_.reset();
     materials_buffer_.reset();
+	vertices_buffer_.reset();
+	indices_buffer_.reset();
+	entity_info_buffer_.reset();
+	light_info_buffer_.reset();
+    lights_.clear();
+	grassland::LogInfo("Cleared scene");
 }
 
 void Scene::BuildAccelerationStructures() {
@@ -239,5 +263,31 @@ void Scene::UpdateBuffers() {
     }
     indices_buffer_->UploadData(indices.data(), indices_buffer_size);
 	grassland::LogInfo("Updated index buffer with {} indices, each of size {}", indices.size(), sizeof(uint32_t));
+
+
+
+	light_info_.num_light = static_cast<int>(lights_.size());
+    if (light_info_.num_light == 0)
+    {
+        Light dummy_light;
+        lights_.push_back(dummy_light);
+    }
+	size_t light_info_buffer_size = sizeof(LightInfo);
+	size_t lights_buffer_size = lights_.size() * sizeof(Light);
+
+    if (!lights_buffer_) {
+        core_->CreateBuffer(lights_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &lights_buffer_);
+	}
+	lights_buffer_->UploadData(lights_.data(), lights_buffer_size);
+	grassland::LogInfo("Updated lights buffer with {} lights, each of size {}", lights_.size(), sizeof(Light));
+
+    if (!light_info_buffer_) {
+        core_->CreateBuffer(light_info_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &light_info_buffer_);
+	}
+	light_info_buffer_->UploadData(&light_info_, light_info_buffer_size);
 
 }

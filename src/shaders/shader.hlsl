@@ -4,6 +4,83 @@
 #include "random.hlsli"
 
 
+float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inout uint seed)
+{
+    float3 directLighting = float3(0, 0, 0);
+
+    // 遍历所有光源 (如果光源很多，应该随机选一个然后除以概率 1/N)
+    for (int i = 0; i < lightinfo.num_light; ++i)
+    {
+        Light light = lights[i];
+        float3 L; // 指向光源的方向
+        float dist; // 到光源的距离
+        float3 lightColor; // 接收到的光强
+        float pdf = 1.0;
+
+        // --- A. 采样光源 (Point vs Area) ---
+        if (light.type == LIGHT_TYPE_POINT)
+        {
+            float3 toLight = light.position - hitPos;
+            dist = length(toLight);
+            L = normalize(toLight);
+            lightColor = light.color / (dist * dist); // 距离衰减
+            pdf = 1.0; // 点光源是 Delta 分布，逻辑上处理为 1
+        }
+        else // LIGHT_TYPE_AREA
+        {
+            // 对于面光源，随机采样表面上一点
+            float r1 = next_rand(seed);
+            float r2 = next_rand(seed);
+            // 假设是矩形光源: pos + u*r1 + v*r2
+            float3 lightSamplePos = light.position + light.u * (r1 - 0.5) * 2.0 + light.v * (r2 - 0.5) * 2.0;
+            
+            float3 toLight = lightSamplePos - hitPos;
+            dist = length(toLight);
+            L = normalize(toLight);
+            
+            // Area light cosine term (光源法线与光线的夹角)
+            // 假设 Area light 的法线是 normalize(cross(u, v))
+            float3 lightNormal = normalize(cross(light.u, light.v));
+            float cosLight = max(dot(-L, lightNormal), 0.0);
+            
+            lightColor = light.color * cosLight / (dist * dist);
+            pdf = 1.0 / light.area; // 面积采样的 PDF
+        }
+
+        // --- B. 遮挡测试 (Shadow Ray) ---
+        // 这里的关键：TraceRay 使用特殊的 Flags
+        // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH: 只要碰到任何东西就停止，不用找最近的
+        // RAY_FLAG_SKIP_CLOSEST_HIT_SHADER: 我们不需要运行 Hit Shader，只要知道遮挡了就行
+        // RAY_FLAG_FORCE_OPAQUE: 假设所有阻挡物都是不透明的
+        
+        RayDesc shadowRay;
+        shadowRay.Origin = hitPos + N * 0.001; // 偏移起点防止 Shadow Acne
+        shadowRay.Direction = L;
+        shadowRay.TMin = 0.001;
+        shadowRay.TMax = dist - 0.1; // 不要打到光源本身
+
+        RayPayload shadowPayload;
+        shadowPayload.hit = true; // 假设被遮挡 (初始化逻辑要看你的 Miss shader 怎么写，通常反过来初始化为 false，Miss 设为 false，CloseHit 不跑)
+        // 实际上，为了利用硬件加速，更好的做法是：
+        // 初始化 shadowPayload.hit = true;
+        // Miss Shader 里把 shadowPayload.hit = false;
+        
+        // 注意：这里需要一个新的 Miss Shader 用于 Shadow Ray，或者复用逻辑
+        // 简单起见，我们假设 TraceRay 如果没撞到东西，系统不会写 payload (需要确认 API 行为)
+        // 最标准的做法是使用 inline raytracing (DXR 1.1) 或者独立的 Shadow Payload/MissShader。
+        
+        // 让我们用一个简化的逻辑：
+        shadowPayload.hit = true; // 先假设击中（被遮挡）
+        
+        // 调用 TraceRay (需要在 RayGen 里调用，不能在函数里直接调 TraceRay 除非把 AS 传进来)
+        // 这里只是伪代码逻辑，下面我会把这段放进 RayGen
+    }
+    return directLighting;
+}
+
+
+
+
 [shader("raygeneration")] void RayGenMain()
 {
     
@@ -14,6 +91,7 @@
     
     // 2. 也是 Anti-aliasing 的一步：在像素内抖动坐标
     float2 pixel_center = (float2) pixel_coords + float2(next_rand(seed), next_rand(seed));
+    //float2 pixel_center = (float2) pixel_coords + float2(0.5, 0.5); // 不抖动版本
     float2 uv = pixel_center / float2(dims);
     uv.y = 1.0 - uv.y;
     float2 d = uv * 2.0 - 1.0;
@@ -50,6 +128,7 @@
     
     RayPayload payload;
     payload.instance_id = -1; // 初始为无效 ID
+    payload.cal_emission = true;
     
     
     
@@ -61,11 +140,14 @@
         
         // 发射光线
         TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
+        
+        if (bounce == 0)
+            entity_id_output[pixel_coords] = payload.hit ? (int) payload.instance_id : -1;
 
         // --- Case 1: Miss (击中天空/背景) ---
         if (!payload.hit)
         {
-            // 这里你可以调用 Miss Shader 里的逻辑，或者直接在这里计算天空色
+        // 这里你可以调用 Miss Shader 里的逻辑，或者直接在这里计算天空色
             
             radiance += throughput * payload.albedo; // 如果 Miss Shader 里设置了 albedo
             break; // 光线逃逸，结束路径
@@ -74,11 +156,101 @@
         // --- Case 2: Hit (击中物体) ---
         
         // (可选) 累加自发光 emission
-        // radiance += throughput * payload.emission;
+        radiance += throughput * payload.emission;
+        // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
+        if (length(payload.emission) > 1.0)
+        {
+            break;
+        }
 
         // 准备下一次反弹的数据
+        float3 P = payload.position;
         float3 N = payload.normal;
         float3 V = -ray.Direction; // 视线方向
+        
+        float3 directLightContrib = float3(0, 0, 0);
+        
+        
+        // 遍历光源 (这里为了演示只写一个循环，实际可能只随机采一个)
+        for (int i = 0; i < lightinfo.num_light; ++i)
+        {
+            Light light = lights[i];
+            float3 L_dir;
+            float dist;
+            float3 L_intensity;
+            float light_pdf;
+
+        // --- 3.1 光源采样 ---
+            if (light.type == LIGHT_TYPE_POINT)
+            {
+                float3 toLight = light.position - P;
+                dist = length(toLight);
+                L_dir = normalize(toLight);
+                L_intensity = light.color / (dist * dist);
+                light_pdf = 1.0;
+            }
+            else
+            { // AREA LIGHT
+            // 简单的均匀采样
+                float r1 = next_rand(seed);
+                float r2 = next_rand(seed);
+            // 假设 Light 是个平面 Quad，定义在 position, u, v
+                float3 samplePos = light.position + light.u * (r1 - 0.5) + light.v * (r2 - 0.5);
+                float3 toLight = samplePos - P;
+                dist = length(toLight);
+                L_dir = normalize(toLight);
+            
+            // 几何项 G = cos(theta_light) / dist^2
+                float3 lightNormal = normalize(cross(light.u, light.v)); // 确保 Light 结构体里有这个或能计算
+                float cosLight = max(dot(-L_dir, lightNormal), 0.0);
+            
+                L_intensity = light.color * cosLight / (dist * dist);
+                light_pdf = 1.0 / light.area;
+            }
+
+        // --- 3.2 阴影射线 (Shadow Ray) ---
+            RayDesc shadowRay;
+            shadowRay.Origin = P + N * 0.001; // Bias
+            shadowRay.Direction = L_dir;
+            shadowRay.TMin = 0.001;
+            shadowRay.TMax = dist - 0.01; // 防止打到光源自己
+
+        // 使用一个新的 Payload 或者简单的 bool
+            RayPayload shadowPayload;
+            shadowPayload.hit = true; // 默认被遮挡
+        
+        // 关键 Flag: SKIP_CLOSEST_HIT_SHADER | ACCEPT_FIRST_HIT_AND_END_SEARCH
+        // 这里的 instanceMask 和 hitGroupIndex 可能需要根据你的 Host 代码调整
+        // 假设 Shadow Miss Shader 在 index 1 (需要在 Host 设置 Shader Table)
+        // 如果没有单独的 Shadow Miss，就用通用的，并在 Miss Shader 里设置 hit = false
+            TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+                 0xFF, 0, 1, 0, shadowRay, shadowPayload); // Miss shader index 设为 0 (通用) 或 1 (专用)
+
+        // 假设 Miss Shader 会把 shadowPayload.hit 设为 false
+            if (!shadowPayload.hit)
+            {
+            // --- 3.3 计算 BRDF 贡献 ---
+                float NdotL = max(dot(N, L_dir), 0.0);
+            
+            // 简单的 Diffuse BRDF = albedo / PI
+            // Result = Throughput * BRDF * L_incoming * NdotL / PDF
+            // 这里 throughput 是路径目前的衰减，不要更新 throughput，而是直接加到 radiance
+            
+                float3 brdf = payload.albedo / PI;
+            
+            // 注意：如果是金属(Metallic)，Diffuse 几乎为 0，这里简化处理
+                brdf *= (1.0 - payload.metallic);
+            
+                directLightContrib += throughput * brdf * L_intensity * NdotL / light_pdf;
+            }
+        }
+    
+        radiance += directLightContrib;
+        
+        
+        
+        
+        
         float3 next_dir;
         
         // === 材质逻辑 (BSDF) ===
@@ -97,6 +269,7 @@
             
             // 镜面反射颜色通常是 base_color (对于金属)
             throughput *= payload.albedo;
+            payload.cal_emission = true; // 下一次计算自发光
         }
         else
         {
@@ -109,7 +282,9 @@
             // Lighting equation term: cos(theta)
             // Throughput update = (Albedo / PI) * cos(theta) / (cos(theta) / PI) = Albedo
             throughput *= payload.albedo;
+            payload.cal_emission = false; // 下一次不计算自发光
         }
+        
 
         // --- 俄罗斯轮盘赌 (Russian Roulette) ---
         // 随着反弹次数增加，throughput 会变小。如果太小，就随机终止，避免浪费计算。
@@ -148,7 +323,6 @@
     
     // Write entity ID to the ID buffer
     // If no hit, write -1; otherwise write the instance ID
-    entity_id_output[pixel_coords] = payload.hit ? (int) payload.instance_id : -1;
     
     // 如果没有 NaN (安全检查)
     if (any(isnan(radiance)))
@@ -181,8 +355,8 @@
     //  float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     //  payload.color = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
   
-    float3 topColor = float3(1.0, 1.0, 1.0);
-    float3 bottomColor = float3(1.0, 1.0, 1.0);
+    float3 topColor = float3(0.1, 0.1, 0.1);
+    float3 bottomColor = float3(0.1, 0.1, 0.1);
     float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     payload.albedo = lerp(topColor, bottomColor, t);
   
@@ -219,8 +393,7 @@
 
     // 获取实例/材质索引
     uint instance_idx = InstanceID();
-    if (payload.instance_id == -1)
-        payload.instance_id = instance_idx;
+    payload.instance_id = instance_idx;
   
     // barycentrics: attr.barycentrics 是 float2 (u,v)，第三分量为 1-u-v
     float2 bary2 = attr.barycentrics;
@@ -284,5 +457,7 @@
     payload.albedo = mat.base_color;
     payload.roughness = mat.roughness;
     payload.metallic = mat.metallic;
-    payload.emission = float3(0, 0, 0); // 暂时设为0，除非你的材质结构体里有 emission
+    //payload.emission = float3(0, 0, 0); // 暂时设为0，除非你的材质结构体里有 emission
+    if (payload.cal_emission)
+        payload.emission = mat.emission;
 }

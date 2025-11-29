@@ -1,6 +1,10 @@
 #ifndef COMMON_HLSLI
 #define COMMON_HLSLI
 
+// 定义光源类型
+#define LIGHT_TYPE_POINT 0
+#define LIGHT_TYPE_AREA  1
+
 // ==================== 结构体定义 ====================
 struct CameraInfo
 {
@@ -13,12 +17,17 @@ struct HoverInfo
     int hovered_entity_id;
 };
 
+struct LightInfo
+{
+    int num_light;
+};
+
 struct Material
 {
     float3 base_color;
     float roughness;
     float metallic;
-    // float3 emission; // 后面做光源时会用到
+    float3 emission; // 后面做光源时会用到
 };
 
 struct EntityInfo
@@ -40,6 +49,7 @@ struct Vertex
 struct RayPayload
 {
     bool hit; // 是否击中
+    bool cal_emission; // 是否计算自发光
     uint instance_id; // 击中的物体ID
     
     // G-Buffer 数据 (将由 ClosestHit 填充)
@@ -49,6 +59,18 @@ struct RayPayload
     float roughness; // 粗糙度
     float metallic; // 金属度
     float3 emission; // 自发光 (可选，如果材质有发光)
+};
+
+struct Light
+{
+    bool type; // 0: Point, 1: Area
+    float3 position; // Point light position or Area light center
+    float3 color; // Light intensity/color (e.g., float3(10, 10, 10))
+    
+    // Area light specifics (例如是一个矩形或者圆盘)
+    float3 u; // Area light edge vector U
+    float3 v; // Area light edge vector V
+    float area; // Surface area
 };
 
 // ==================== 全局资源绑定 ====================
@@ -64,5 +86,7 @@ RWTexture2D<int> accumulated_samples : register(u0, space7);
 StructuredBuffer<EntityInfo> entity_infos : register(t0, space8);
 StructuredBuffer<Vertex> vertices : register(t0, space9);
 StructuredBuffer<uint> indices : register(t0, space10);
+ConstantBuffer<LightInfo> lightinfo : register(b0, space11);
+StructuredBuffer<Light> lights : register(t0, space12);
 
 #endif
