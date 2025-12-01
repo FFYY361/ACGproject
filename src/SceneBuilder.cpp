@@ -21,7 +21,7 @@ std::shared_ptr<Entity> SceneBuilder::CreateSphere(
     const Material& material
 ) {
     return std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/sphere.obj",
+        PROJECT_DIR "/meshes/simple_sphere.obj",
         material,
         glm::scale(glm::translate(glm::mat4(1.0f), position), glm::vec3(radius))
     );
@@ -80,6 +80,16 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
         glm::vec3(1.0f, 1.0f, 1.0f),
         Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 0.0f)
     ));
+
+    {
+        // Light source - a small emissive cube above the scene
+        auto light = std::make_shared<Light>(
+            0,
+            glm::vec3(0.0f, 2.0f, 1.0f),
+            glm::vec3(8.0f, 8.0f, 8.0f)
+        );
+         scene->AddLight(light);
+    }
     
     scene->BuildAccelerationStructures();
 }
