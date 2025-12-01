@@ -1,10 +1,10 @@
-#ifndef RANDOM_HLSLI
+ï»¿#ifndef RANDOM_HLSLI
 #define RANDOM_HLSLI
 
-// ¼òµ¥µÄ³£Á¿ PI
+// ç®€å•çš„å¸¸é‡ PI
 static const float PI = 3.14159265359;
 
-// PCG Hash Ëæ»úÊıÉú³ÉÆ÷
+// PCG Hash éšæœºæ•°ç”Ÿæˆå™¨
 uint init_rand(uint val0, uint val1, uint backoff = 16)
 {
     uint v0 = val0, v1 = val1, s0 = 0;
@@ -24,7 +24,7 @@ float next_rand(inout uint s)
     return float(s & 0x00FFFFFF) / float(0x01000000);
 }
 
-// ¸¨Öúº¯Êı£ºÉú³ÉÓàÏÒ¼ÓÈ¨µÄ°ëÇò²ÉÑù·½Ïò
+// è¾…åŠ©å‡½æ•°ï¼šç”Ÿæˆä½™å¼¦åŠ æƒçš„åŠçƒé‡‡æ ·æ–¹å‘
 float3 GetCosineWeightedSample(float3 N, inout uint seed)
 {
     float u1 = next_rand(seed);
@@ -37,7 +37,7 @@ float3 GetCosineWeightedSample(float3 N, inout uint seed)
     float y = r * sin(theta);
     float z = sqrt(max(0.0, 1.0 - u1));
     
-    // ¹¹½¨ÇĞÏß¿Õ¼ä (TBN)
+    // æ„å»ºåˆ‡çº¿ç©ºé—´ (TBN)
     float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
     float3 T = normalize(cross(up, N));
     float3 B = cross(N, T);

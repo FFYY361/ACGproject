@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "long_march.h"
 #include "Entity.h"
 #include "Material.h"

@@ -1,4 +1,4 @@
-#include "Entity.h"
+﻿#include "Entity.h"
 
 Entity::Entity(const std::string& obj_file_path, 
                const Material& material,

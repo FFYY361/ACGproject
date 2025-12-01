@@ -1,11 +1,11 @@
-#ifndef COMMON_HLSLI
+ï»¿#ifndef COMMON_HLSLI
 #define COMMON_HLSLI
 
-// ¶¨Òå¹âÔ´ÀàĞÍ
+// å®šä¹‰å…‰æºç±»å‹
 #define LIGHT_TYPE_POINT 0
 #define LIGHT_TYPE_AREA  1
 
-// ==================== ½á¹¹Ìå¶¨Òå ====================
+// ==================== ç»“æ„ä½“å®šä¹‰ ====================
 struct CameraInfo
 {
     float4x4 screen_to_camera;
@@ -27,7 +27,7 @@ struct Material
     float3 base_color;
     float roughness;
     float metallic;
-    float3 emission; // ºóÃæ×ö¹âÔ´Ê±»áÓÃµ½
+    float3 emission; // åé¢åšå…‰æºæ—¶ä¼šç”¨åˆ°
 };
 
 struct EntityInfo
@@ -45,20 +45,20 @@ struct Vertex
     float3 normal;
 };
 
-// ÖØ¹¹ºóµÄ RayPayload (ÈçÉÏÒ»Ìõ½¨ÒéËùÊö)
+// é‡æ„åçš„ RayPayload (å¦‚ä¸Šä¸€æ¡å»ºè®®æ‰€è¿°)
 struct RayPayload
 {
-    bool hit; // ÊÇ·ñ»÷ÖĞ
-    bool cal_emission; // ÊÇ·ñ¼ÆËã×Ô·¢¹â
-    uint instance_id; // »÷ÖĞµÄÎïÌåID
+    bool hit; // æ˜¯å¦å‡»ä¸­
+    bool cal_emission; // æ˜¯å¦è®¡ç®—è‡ªå‘å…‰
+    uint instance_id; // å‡»ä¸­çš„ç‰©ä½“ID
     
-    // G-Buffer Êı¾İ (½«ÓÉ ClosestHit Ìî³ä)
-    float3 position; // ÊÀ½ç×ø±êÎ»ÖÃ
-    float3 normal; // ÊÀ½ç×ø±ê·¨Ïß
-    float3 albedo; // ²ÄÖÊÑÕÉ«
-    float roughness; // ´Ö²Ú¶È
-    float metallic; // ½ğÊô¶È
-    float3 emission; // ×Ô·¢¹â (¿ÉÑ¡£¬Èç¹û²ÄÖÊÓĞ·¢¹â)
+    // G-Buffer æ•°æ® (å°†ç”± ClosestHit å¡«å……)
+    float3 position; // ä¸–ç•Œåæ ‡ä½ç½®
+    float3 normal; // ä¸–ç•Œåæ ‡æ³•çº¿
+    float3 albedo; // æè´¨é¢œè‰²
+    float roughness; // ç²—ç³™åº¦
+    float metallic; // é‡‘å±åº¦
+    float3 emission; // è‡ªå‘å…‰ (å¯é€‰ï¼Œå¦‚æœæè´¨æœ‰å‘å…‰)
 };
 
 struct Light
@@ -67,14 +67,14 @@ struct Light
     float3 position; // Point light position or Area light center
     float3 color; // Light intensity/color (e.g., float3(10, 10, 10))
     
-    // Area light specifics (ÀıÈçÊÇÒ»¸ö¾ØĞÎ»òÕßÔ²ÅÌ)
+    // Area light specifics (ä¾‹å¦‚æ˜¯ä¸€ä¸ªçŸ©å½¢æˆ–è€…åœ†ç›˜)
     float3 u; // Area light edge vector U
     float3 v; // Area light edge vector V
     float area; // Surface area
 };
 
-// ==================== È«¾Ö×ÊÔ´°ó¶¨ ====================
-// °Ñ¼Ä´æÆ÷°ó¶¨·ÅÔÚÕâÀï£¬ËùÓĞ shader ¶¼ÄÜ¿´µ½
+// ==================== å…¨å±€èµ„æºç»‘å®š ====================
+// æŠŠå¯„å­˜å™¨ç»‘å®šæ”¾åœ¨è¿™é‡Œï¼Œæ‰€æœ‰ shader éƒ½èƒ½çœ‹åˆ°
 RaytracingAccelerationStructure as : register(t0, space0);
 RWTexture2D<float4> output : register(u0, space1);
 ConstantBuffer<CameraInfo> camera_info : register(b0, space2);

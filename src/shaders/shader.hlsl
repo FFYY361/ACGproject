@@ -1,5 +1,5 @@
-
-// 1. ÒıÈëÆäËûÄ£¿é
+ï»¿
+// 1. å¼•å…¥å…¶ä»–æ¨¡å—
 #include "common.hlsli"
 #include "random.hlsli"
 
@@ -8,72 +8,72 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
 {
     float3 directLighting = float3(0, 0, 0);
 
-    // ±éÀúËùÓĞ¹âÔ´ (Èç¹û¹âÔ´ºÜ¶à£¬Ó¦¸ÃËæ»úÑ¡Ò»¸öÈ»ºó³ıÒÔ¸ÅÂÊ 1/N)
+    // éå†æ‰€æœ‰å…‰æº (å¦‚æœå…‰æºå¾ˆå¤šï¼Œåº”è¯¥éšæœºé€‰ä¸€ä¸ªç„¶åé™¤ä»¥æ¦‚ç‡ 1/N)
     for (int i = 0; i < lightinfo.num_light; ++i)
     {
         Light light = lights[i];
-        float3 L; // Ö¸Ïò¹âÔ´µÄ·½Ïò
-        float dist; // µ½¹âÔ´µÄ¾àÀë
-        float3 lightColor; // ½ÓÊÕµ½µÄ¹âÇ¿
+        float3 L; // æŒ‡å‘å…‰æºçš„æ–¹å‘
+        float dist; // åˆ°å…‰æºçš„è·ç¦»
+        float3 lightColor; // æ¥æ”¶åˆ°çš„å…‰å¼º
         float pdf = 1.0;
 
-        // --- A. ²ÉÑù¹âÔ´ (Point vs Area) ---
+        // --- A. é‡‡æ ·å…‰æº (Point vs Area) ---
         if (light.type == LIGHT_TYPE_POINT)
         {
             float3 toLight = light.position - hitPos;
             dist = length(toLight);
             L = normalize(toLight);
-            lightColor = light.color / (dist * dist); // ¾àÀëË¥¼õ
-            pdf = 1.0; // µã¹âÔ´ÊÇ Delta ·Ö²¼£¬Âß¼­ÉÏ´¦ÀíÎª 1
+            lightColor = light.color / (dist * dist); // è·ç¦»è¡°å‡
+            pdf = 1.0; // ç‚¹å…‰æºæ˜¯ Delta åˆ†å¸ƒï¼Œé€»è¾‘ä¸Šå¤„ç†ä¸º 1
         }
         else // LIGHT_TYPE_AREA
         {
-            // ¶ÔÓÚÃæ¹âÔ´£¬Ëæ»ú²ÉÑù±íÃæÉÏÒ»µã
+            // å¯¹äºé¢å…‰æºï¼Œéšæœºé‡‡æ ·è¡¨é¢ä¸Šä¸€ç‚¹
             float r1 = next_rand(seed);
             float r2 = next_rand(seed);
-            // ¼ÙÉèÊÇ¾ØĞÎ¹âÔ´: pos + u*r1 + v*r2
+            // å‡è®¾æ˜¯çŸ©å½¢å…‰æº: pos + u*r1 + v*r2
             float3 lightSamplePos = light.position + light.u * (r1 - 0.5) * 2.0 + light.v * (r2 - 0.5) * 2.0;
             
             float3 toLight = lightSamplePos - hitPos;
             dist = length(toLight);
             L = normalize(toLight);
             
-            // Area light cosine term (¹âÔ´·¨ÏßÓë¹âÏßµÄ¼Ğ½Ç)
-            // ¼ÙÉè Area light µÄ·¨ÏßÊÇ normalize(cross(u, v))
+            // Area light cosine term (å…‰æºæ³•çº¿ä¸å…‰çº¿çš„å¤¹è§’)
+            // å‡è®¾ Area light çš„æ³•çº¿æ˜¯ normalize(cross(u, v))
             float3 lightNormal = normalize(cross(light.u, light.v));
             float cosLight = max(dot(-L, lightNormal), 0.0);
             
             lightColor = light.color * cosLight / (dist * dist);
-            pdf = 1.0 / light.area; // Ãæ»ı²ÉÑùµÄ PDF
+            pdf = 1.0 / light.area; // é¢ç§¯é‡‡æ ·çš„ PDF
         }
 
-        // --- B. ÕÚµ²²âÊÔ (Shadow Ray) ---
-        // ÕâÀïµÄ¹Ø¼ü£ºTraceRay Ê¹ÓÃÌØÊâµÄ Flags
-        // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH: Ö»ÒªÅöµ½ÈÎºÎ¶«Î÷¾ÍÍ£Ö¹£¬²»ÓÃÕÒ×î½üµÄ
-        // RAY_FLAG_SKIP_CLOSEST_HIT_SHADER: ÎÒÃÇ²»ĞèÒªÔËĞĞ Hit Shader£¬Ö»ÒªÖªµÀÕÚµ²ÁË¾ÍĞĞ
-        // RAY_FLAG_FORCE_OPAQUE: ¼ÙÉèËùÓĞ×èµ²Îï¶¼ÊÇ²»Í¸Ã÷µÄ
+        // --- B. é®æŒ¡æµ‹è¯• (Shadow Ray) ---
+        // è¿™é‡Œçš„å…³é”®ï¼šTraceRay ä½¿ç”¨ç‰¹æ®Šçš„ Flags
+        // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH: åªè¦ç¢°åˆ°ä»»ä½•ä¸œè¥¿å°±åœæ­¢ï¼Œä¸ç”¨æ‰¾æœ€è¿‘çš„
+        // RAY_FLAG_SKIP_CLOSEST_HIT_SHADER: æˆ‘ä»¬ä¸éœ€è¦è¿è¡Œ Hit Shaderï¼Œåªè¦çŸ¥é“é®æŒ¡äº†å°±è¡Œ
+        // RAY_FLAG_FORCE_OPAQUE: å‡è®¾æ‰€æœ‰é˜»æŒ¡ç‰©éƒ½æ˜¯ä¸é€æ˜çš„
         
         RayDesc shadowRay;
-        shadowRay.Origin = hitPos + N * 0.001; // Æ«ÒÆÆğµã·ÀÖ¹ Shadow Acne
+        shadowRay.Origin = hitPos + N * 0.001; // åç§»èµ·ç‚¹é˜²æ­¢ Shadow Acne
         shadowRay.Direction = L;
         shadowRay.TMin = 0.001;
-        shadowRay.TMax = dist - 0.1; // ²»Òª´òµ½¹âÔ´±¾Éí
+        shadowRay.TMax = dist - 0.1; // ä¸è¦æ‰“åˆ°å…‰æºæœ¬èº«
 
         RayPayload shadowPayload;
-        shadowPayload.hit = true; // ¼ÙÉè±»ÕÚµ² (³õÊ¼»¯Âß¼­Òª¿´ÄãµÄ Miss shader ÔõÃ´Ğ´£¬Í¨³£·´¹ıÀ´³õÊ¼»¯Îª false£¬Miss ÉèÎª false£¬CloseHit ²»ÅÜ)
-        // Êµ¼ÊÉÏ£¬ÎªÁËÀûÓÃÓ²¼ş¼ÓËÙ£¬¸üºÃµÄ×ö·¨ÊÇ£º
-        // ³õÊ¼»¯ shadowPayload.hit = true;
-        // Miss Shader Àï°Ñ shadowPayload.hit = false;
+        shadowPayload.hit = true; // å‡è®¾è¢«é®æŒ¡ (åˆå§‹åŒ–é€»è¾‘è¦çœ‹ä½ çš„ Miss shader æ€ä¹ˆå†™ï¼Œé€šå¸¸åè¿‡æ¥åˆå§‹åŒ–ä¸º falseï¼ŒMiss è®¾ä¸º falseï¼ŒCloseHit ä¸è·‘)
+        // å®é™…ä¸Šï¼Œä¸ºäº†åˆ©ç”¨ç¡¬ä»¶åŠ é€Ÿï¼Œæ›´å¥½çš„åšæ³•æ˜¯ï¼š
+        // åˆå§‹åŒ– shadowPayload.hit = true;
+        // Miss Shader é‡ŒæŠŠ shadowPayload.hit = false;
         
-        // ×¢Òâ£ºÕâÀïĞèÒªÒ»¸öĞÂµÄ Miss Shader ÓÃÓÚ Shadow Ray£¬»òÕß¸´ÓÃÂß¼­
-        // ¼òµ¥Æğ¼û£¬ÎÒÃÇ¼ÙÉè TraceRay Èç¹ûÃ»×²µ½¶«Î÷£¬ÏµÍ³²»»áĞ´ payload (ĞèÒªÈ·ÈÏ API ĞĞÎª)
-        // ×î±ê×¼µÄ×ö·¨ÊÇÊ¹ÓÃ inline raytracing (DXR 1.1) »òÕß¶ÀÁ¢µÄ Shadow Payload/MissShader¡£
+        // æ³¨æ„ï¼šè¿™é‡Œéœ€è¦ä¸€ä¸ªæ–°çš„ Miss Shader ç”¨äº Shadow Rayï¼Œæˆ–è€…å¤ç”¨é€»è¾‘
+        // ç®€å•èµ·è§ï¼Œæˆ‘ä»¬å‡è®¾ TraceRay å¦‚æœæ²¡æ’åˆ°ä¸œè¥¿ï¼Œç³»ç»Ÿä¸ä¼šå†™ payload (éœ€è¦ç¡®è®¤ API è¡Œä¸º)
+        // æœ€æ ‡å‡†çš„åšæ³•æ˜¯ä½¿ç”¨ inline raytracing (DXR 1.1) æˆ–è€…ç‹¬ç«‹çš„ Shadow Payload/MissShaderã€‚
         
-        // ÈÃÎÒÃÇÓÃÒ»¸ö¼ò»¯µÄÂß¼­£º
-        shadowPayload.hit = true; // ÏÈ¼ÙÉè»÷ÖĞ£¨±»ÕÚµ²£©
+        // è®©æˆ‘ä»¬ç”¨ä¸€ä¸ªç®€åŒ–çš„é€»è¾‘ï¼š
+        shadowPayload.hit = true; // å…ˆå‡è®¾å‡»ä¸­ï¼ˆè¢«é®æŒ¡ï¼‰
         
-        // µ÷ÓÃ TraceRay (ĞèÒªÔÚ RayGen Àïµ÷ÓÃ£¬²»ÄÜÔÚº¯ÊıÀïÖ±½Óµ÷ TraceRay ³ı·Ç°Ñ AS ´«½øÀ´)
-        // ÕâÀïÖ»ÊÇÎ±´úÂëÂß¼­£¬ÏÂÃæÎÒ»á°ÑÕâ¶Î·Å½ø RayGen
+        // è°ƒç”¨ TraceRay (éœ€è¦åœ¨ RayGen é‡Œè°ƒç”¨ï¼Œä¸èƒ½åœ¨å‡½æ•°é‡Œç›´æ¥è°ƒ TraceRay é™¤éæŠŠ AS ä¼ è¿›æ¥)
+        // è¿™é‡Œåªæ˜¯ä¼ªä»£ç é€»è¾‘ï¼Œä¸‹é¢æˆ‘ä¼šæŠŠè¿™æ®µæ”¾è¿› RayGen
     }
     return directLighting;
 }
@@ -84,14 +84,14 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
 [shader("raygeneration")] void RayGenMain()
 {
     
-    // 1. ³õÊ¼»¯Ëæ»úÊıÖÖ×Ó (ÏñËØ×ø±ê + ÀÛ¼ÆÖ¡Êı)
+    // 1. åˆå§‹åŒ–éšæœºæ•°ç§å­ (åƒç´ åæ ‡ + ç´¯è®¡å¸§æ•°)
     uint2 pixel_coords = DispatchRaysIndex().xy;
     uint2 dims = DispatchRaysDimensions().xy;
     uint seed = init_rand(pixel_coords.x + pixel_coords.y * dims.x, accumulated_samples[pixel_coords], 16);
     
-    // 2. Ò²ÊÇ Anti-aliasing µÄÒ»²½£ºÔÚÏñËØÄÚ¶¶¶¯×ø±ê
+    // 2. ä¹Ÿæ˜¯ Anti-aliasing çš„ä¸€æ­¥ï¼šåœ¨åƒç´ å†…æŠ–åŠ¨åæ ‡
     float2 pixel_center = (float2) pixel_coords + float2(next_rand(seed), next_rand(seed));
-    //float2 pixel_center = (float2) pixel_coords + float2(0.5, 0.5); // ²»¶¶¶¯°æ±¾
+    //float2 pixel_center = (float2) pixel_coords + float2(0.5, 0.5); // ä¸æŠ–åŠ¨ç‰ˆæœ¬
     float2 uv = pixel_center / float2(dims);
     uv.y = 1.0 - uv.y;
     float2 d = uv * 2.0 - 1.0;
@@ -103,7 +103,7 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
     float2 d = uv * 2.0 - 1.0;
     */
     
-    // 3. Éú³É³õÊ¼¹âÏß
+    // 3. ç”Ÿæˆåˆå§‹å…‰çº¿
     float4 origin = mul(camera_info.camera_to_world, float4(0, 0, 0, 1));
     float4 target = mul(camera_info.screen_to_camera, float4(d, 1, 1));
     float4 direction = mul(camera_info.camera_to_world, float4(target.xyz, 0));
@@ -127,51 +127,51 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
     float3 radiance = float3(0.0, 0.0, 0.0);
     
     RayPayload payload;
-    payload.instance_id = -1; // ³õÊ¼ÎªÎŞĞ§ ID
+    payload.instance_id = -1; // åˆå§‹ä¸ºæ— æ•ˆ ID
     payload.cal_emission = true;
     
     
     
-    // === Â·¾¶×·×ÙÖ÷Ñ­»· ===
-    // ÏŞÖÆ×î´ó·´µ¯´ÎÊı£¬ÀıÈç 3 »ò 5
+    // === è·¯å¾„è¿½è¸ªä¸»å¾ªç¯ ===
+    // é™åˆ¶æœ€å¤§åå¼¹æ¬¡æ•°ï¼Œä¾‹å¦‚ 3 æˆ– 5
     for (int bounce = 0; bounce < 5; bounce++)
     {
         payload.hit = false;
         
-        // ·¢Éä¹âÏß
+        // å‘å°„å…‰çº¿
         TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
         
         if (bounce == 0)
             entity_id_output[pixel_coords] = payload.hit ? (int) payload.instance_id : -1;
 
-        // --- Case 1: Miss (»÷ÖĞÌì¿Õ/±³¾°) ---
+        // --- Case 1: Miss (å‡»ä¸­å¤©ç©º/èƒŒæ™¯) ---
         if (!payload.hit)
         {
-        // ÕâÀïÄã¿ÉÒÔµ÷ÓÃ Miss Shader ÀïµÄÂß¼­£¬»òÕßÖ±½ÓÔÚÕâÀï¼ÆËãÌì¿ÕÉ«
+        // è¿™é‡Œä½ å¯ä»¥è°ƒç”¨ Miss Shader é‡Œçš„é€»è¾‘ï¼Œæˆ–è€…ç›´æ¥åœ¨è¿™é‡Œè®¡ç®—å¤©ç©ºè‰²
             
-            radiance += throughput * payload.albedo; // Èç¹û Miss Shader ÀïÉèÖÃÁË albedo
-            break; // ¹âÏßÌÓÒİ£¬½áÊøÂ·¾¶
+            radiance += throughput * payload.albedo; // å¦‚æœ Miss Shader é‡Œè®¾ç½®äº† albedo
+            break; // å…‰çº¿é€ƒé€¸ï¼Œç»“æŸè·¯å¾„
         }
 
-        // --- Case 2: Hit (»÷ÖĞÎïÌå) ---
+        // --- Case 2: Hit (å‡»ä¸­ç‰©ä½“) ---
         
-        // (¿ÉÑ¡) ÀÛ¼Ó×Ô·¢¹â emission
+        // (å¯é€‰) ç´¯åŠ è‡ªå‘å…‰ emission
         radiance += throughput * payload.emission;
-        // Èç¹û»÷ÖĞµÄÊÇ·Ç³£Ç¿µÄ¹âÔ´£¬Í¨³£ÎÒÃÇ¾ÍÍ£Ö¹Â·¾¶×·×ÙÁË£¬ÒòÎª¹âÏßÒÑ¾­¡°ÕÒµ½¼Ò¡±ÁË
+        // å¦‚æœå‡»ä¸­çš„æ˜¯éå¸¸å¼ºçš„å…‰æºï¼Œé€šå¸¸æˆ‘ä»¬å°±åœæ­¢è·¯å¾„è¿½è¸ªäº†ï¼Œå› ä¸ºå…‰çº¿å·²ç»â€œæ‰¾åˆ°å®¶â€äº†
         if (length(payload.emission) > 1.0)
         {
             break;
         }
 
-        // ×¼±¸ÏÂÒ»´Î·´µ¯µÄÊı¾İ
+        // å‡†å¤‡ä¸‹ä¸€æ¬¡åå¼¹çš„æ•°æ®
         float3 P = payload.position;
         float3 N = payload.normal;
-        float3 V = -ray.Direction; // ÊÓÏß·½Ïò
+        float3 V = -ray.Direction; // è§†çº¿æ–¹å‘
         
         float3 directLightContrib = float3(0, 0, 0);
         
         
-        // ±éÀú¹âÔ´ (ÕâÀïÎªÁËÑİÊ¾Ö»Ğ´Ò»¸öÑ­»·£¬Êµ¼Ê¿ÉÄÜÖ»Ëæ»ú²ÉÒ»¸ö)
+        // éå†å…‰æº (è¿™é‡Œä¸ºäº†æ¼”ç¤ºåªå†™ä¸€ä¸ªå¾ªç¯ï¼Œå®é™…å¯èƒ½åªéšæœºé‡‡ä¸€ä¸ª)
         for (int i = 0; i < lightinfo.num_light; ++i)
         {
             Light light = lights[i];
@@ -180,7 +180,7 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
             float3 L_intensity;
             float light_pdf;
 
-        // --- 3.1 ¹âÔ´²ÉÑù ---
+        // --- 3.1 å…‰æºé‡‡æ · ---
             if (light.type == LIGHT_TYPE_POINT)
             {
                 float3 toLight = light.position - P;
@@ -191,54 +191,54 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
             }
             else
             { // AREA LIGHT
-            // ¼òµ¥µÄ¾ùÔÈ²ÉÑù
+            // ç®€å•çš„å‡åŒ€é‡‡æ ·
                 float r1 = next_rand(seed);
                 float r2 = next_rand(seed);
-            // ¼ÙÉè Light ÊÇ¸öÆ½Ãæ Quad£¬¶¨ÒåÔÚ position, u, v
+            // å‡è®¾ Light æ˜¯ä¸ªå¹³é¢ Quadï¼Œå®šä¹‰åœ¨ position, u, v
                 float3 samplePos = light.position + light.u * (r1 - 0.5) + light.v * (r2 - 0.5);
                 float3 toLight = samplePos - P;
                 dist = length(toLight);
                 L_dir = normalize(toLight);
             
-            // ¼¸ºÎÏî G = cos(theta_light) / dist^2
-                float3 lightNormal = normalize(cross(light.u, light.v)); // È·±£ Light ½á¹¹ÌåÀïÓĞÕâ¸ö»òÄÜ¼ÆËã
+            // å‡ ä½•é¡¹ G = cos(theta_light) / dist^2
+                float3 lightNormal = normalize(cross(light.u, light.v)); // ç¡®ä¿ Light ç»“æ„ä½“é‡Œæœ‰è¿™ä¸ªæˆ–èƒ½è®¡ç®—
                 float cosLight = max(dot(-L_dir, lightNormal), 0.0);
             
                 L_intensity = light.color * cosLight / (dist * dist);
                 light_pdf = 1.0 / light.area;
             }
 
-        // --- 3.2 ÒõÓ°ÉäÏß (Shadow Ray) ---
+        // --- 3.2 é˜´å½±å°„çº¿ (Shadow Ray) ---
             RayDesc shadowRay;
             shadowRay.Origin = P + N * 0.001; // Bias
             shadowRay.Direction = L_dir;
             shadowRay.TMin = 0.001;
-            shadowRay.TMax = dist - 0.01; // ·ÀÖ¹´òµ½¹âÔ´×Ô¼º
+            shadowRay.TMax = dist - 0.01; // é˜²æ­¢æ‰“åˆ°å…‰æºè‡ªå·±
 
-        // Ê¹ÓÃÒ»¸öĞÂµÄ Payload »òÕß¼òµ¥µÄ bool
+        // ä½¿ç”¨ä¸€ä¸ªæ–°çš„ Payload æˆ–è€…ç®€å•çš„ bool
             RayPayload shadowPayload;
-            shadowPayload.hit = true; // Ä¬ÈÏ±»ÕÚµ²
+            shadowPayload.hit = true; // é»˜è®¤è¢«é®æŒ¡
         
-        // ¹Ø¼ü Flag: SKIP_CLOSEST_HIT_SHADER | ACCEPT_FIRST_HIT_AND_END_SEARCH
-        // ÕâÀïµÄ instanceMask ºÍ hitGroupIndex ¿ÉÄÜĞèÒª¸ù¾İÄãµÄ Host ´úÂëµ÷Õû
-        // ¼ÙÉè Shadow Miss Shader ÔÚ index 1 (ĞèÒªÔÚ Host ÉèÖÃ Shader Table)
-        // Èç¹ûÃ»ÓĞµ¥¶ÀµÄ Shadow Miss£¬¾ÍÓÃÍ¨ÓÃµÄ£¬²¢ÔÚ Miss Shader ÀïÉèÖÃ hit = false
+        // å…³é”® Flag: SKIP_CLOSEST_HIT_SHADER | ACCEPT_FIRST_HIT_AND_END_SEARCH
+        // è¿™é‡Œçš„ instanceMask å’Œ hitGroupIndex å¯èƒ½éœ€è¦æ ¹æ®ä½ çš„ Host ä»£ç è°ƒæ•´
+        // å‡è®¾ Shadow Miss Shader åœ¨ index 1 (éœ€è¦åœ¨ Host è®¾ç½® Shader Table)
+        // å¦‚æœæ²¡æœ‰å•ç‹¬çš„ Shadow Missï¼Œå°±ç”¨é€šç”¨çš„ï¼Œå¹¶åœ¨ Miss Shader é‡Œè®¾ç½® hit = false
             TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-                 0xFF, 0, 1, 0, shadowRay, shadowPayload); // Miss shader index ÉèÎª 0 (Í¨ÓÃ) »ò 1 (×¨ÓÃ)
+                 0xFF, 0, 1, 0, shadowRay, shadowPayload); // Miss shader index è®¾ä¸º 0 (é€šç”¨) æˆ– 1 (ä¸“ç”¨)
 
-        // ¼ÙÉè Miss Shader »á°Ñ shadowPayload.hit ÉèÎª false
+        // å‡è®¾ Miss Shader ä¼šæŠŠ shadowPayload.hit è®¾ä¸º false
             if (!shadowPayload.hit)
             {
-            // --- 3.3 ¼ÆËã BRDF ¹±Ï× ---
+            // --- 3.3 è®¡ç®— BRDF è´¡çŒ® ---
                 float NdotL = max(dot(N, L_dir), 0.0);
             
-            // ¼òµ¥µÄ Diffuse BRDF = albedo / PI
+            // ç®€å•çš„ Diffuse BRDF = albedo / PI
             // Result = Throughput * BRDF * L_incoming * NdotL / PDF
-            // ÕâÀï throughput ÊÇÂ·¾¶Ä¿Ç°µÄË¥¼õ£¬²»Òª¸üĞÂ throughput£¬¶øÊÇÖ±½Ó¼Óµ½ radiance
+            // è¿™é‡Œ throughput æ˜¯è·¯å¾„ç›®å‰çš„è¡°å‡ï¼Œä¸è¦æ›´æ–° throughputï¼Œè€Œæ˜¯ç›´æ¥åŠ åˆ° radiance
             
                 float3 brdf = payload.albedo / PI;
             
-            // ×¢Òâ£ºÈç¹ûÊÇ½ğÊô(Metallic)£¬Diffuse ¼¸ºõÎª 0£¬ÕâÀï¼ò»¯´¦Àí
+            // æ³¨æ„ï¼šå¦‚æœæ˜¯é‡‘å±(Metallic)ï¼ŒDiffuse å‡ ä¹ä¸º 0ï¼Œè¿™é‡Œç®€åŒ–å¤„ç†
                 brdf *= (1.0 - payload.metallic);
             
                 directLightContrib += throughput * brdf * L_intensity * NdotL / light_pdf;
@@ -253,28 +253,28 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
         
         float3 next_dir;
         
-        // === ²ÄÖÊÂß¼­ (BSDF) ===
-        // ÕâÀï¸ù¾İ Roughness ºÍ Metallic ¼òµ¥Çø·Ö Diffuse ºÍ Specular
+        // === æè´¨é€»è¾‘ (BSDF) ===
+        // è¿™é‡Œæ ¹æ® Roughness å’Œ Metallic ç®€å•åŒºåˆ† Diffuse å’Œ Specular
         
-        float probability_specular = payload.metallic; // ¼òµ¥µÄ»ìºÏ¸ÅÂÊ
-        // Èç¹ûÏë¸üÎïÀí£¬Ó¦¸ÃÊ¹ÓÃ Fresnel ¼ÆËã specular ¸ÅÂÊ
+        float probability_specular = payload.metallic; // ç®€å•çš„æ··åˆæ¦‚ç‡
+        // å¦‚æœæƒ³æ›´ç‰©ç†ï¼Œåº”è¯¥ä½¿ç”¨ Fresnel è®¡ç®— specular æ¦‚ç‡
         
         if (next_rand(seed) < probability_specular)
         {
-            // --- Specular (¾µÃæ·´Éä) ---
-            // ÍêÃÀ¾µÃæ·´Éä: reflect(I, N). I ÊÇÈëÉä¹â·½Ïò (ray.Direction)
-            // Èç¹ûÒªÖ§³Ö´Ö²Ú¶È£¬ĞèÒª¶Ô·´Éä·½Ïò½øĞĞ Importance Sampling (Èç GGX)
-            // ¼òµ¥Æğ¼û£¬ÕâÀïÏÈ×öÍêÃÀ·´Éä£º
+            // --- Specular (é•œé¢åå°„) ---
+            // å®Œç¾é•œé¢åå°„: reflect(I, N). I æ˜¯å…¥å°„å…‰æ–¹å‘ (ray.Direction)
+            // å¦‚æœè¦æ”¯æŒç²—ç³™åº¦ï¼Œéœ€è¦å¯¹åå°„æ–¹å‘è¿›è¡Œ Importance Sampling (å¦‚ GGX)
+            // ç®€å•èµ·è§ï¼Œè¿™é‡Œå…ˆåšå®Œç¾åå°„ï¼š
             next_dir = reflect(ray.Direction, N);
             
-            // ¾µÃæ·´ÉäÑÕÉ«Í¨³£ÊÇ base_color (¶ÔÓÚ½ğÊô)
+            // é•œé¢åå°„é¢œè‰²é€šå¸¸æ˜¯ base_color (å¯¹äºé‡‘å±)
             throughput *= payload.albedo;
-            payload.cal_emission = true; // ÏÂÒ»´Î¼ÆËã×Ô·¢¹â
+            payload.cal_emission = true; // ä¸‹ä¸€æ¬¡è®¡ç®—è‡ªå‘å…‰
         }
         else
         {
-            // --- Diffuse (Âş·´Éä) ---
-            // Ê¹ÓÃÓàÏÒ¼ÓÈ¨²ÉÑù
+            // --- Diffuse (æ¼«åå°„) ---
+            // ä½¿ç”¨ä½™å¼¦åŠ æƒé‡‡æ ·
             next_dir = GetCosineWeightedSample(N, seed);
             
             // Lambertian BRDF: Albedo / PI
@@ -282,22 +282,22 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
             // Lighting equation term: cos(theta)
             // Throughput update = (Albedo / PI) * cos(theta) / (cos(theta) / PI) = Albedo
             throughput *= payload.albedo;
-            payload.cal_emission = false; // ÏÂÒ»´Î²»¼ÆËã×Ô·¢¹â
+            payload.cal_emission = false; // ä¸‹ä¸€æ¬¡ä¸è®¡ç®—è‡ªå‘å…‰
         }
         
 
-        // --- ¶íÂŞË¹ÂÖÅÌ¶Ä (Russian Roulette) ---
-        // Ëæ×Å·´µ¯´ÎÊıÔö¼Ó£¬throughput »á±äĞ¡¡£Èç¹ûÌ«Ğ¡£¬¾ÍËæ»úÖÕÖ¹£¬±ÜÃâÀË·Ñ¼ÆËã¡£
+        // --- ä¿„ç½—æ–¯è½®ç›˜èµŒ (Russian Roulette) ---
+        // éšç€åå¼¹æ¬¡æ•°å¢åŠ ï¼Œthroughput ä¼šå˜å°ã€‚å¦‚æœå¤ªå°ï¼Œå°±éšæœºç»ˆæ­¢ï¼Œé¿å…æµªè´¹è®¡ç®—ã€‚
         if (bounce > 2)
         {
             float p = max(throughput.x, max(throughput.y, throughput.z));
             if (next_rand(seed) > p)
-                break; // ÖÕÖ¹
-            throughput /= p; // ÄÜÁ¿²¹³¥
+                break; // ç»ˆæ­¢
+            throughput /= p; // èƒ½é‡è¡¥å¿
         }
 
-        // --- ¸üĞÂ¹âÏß ---
-        ray.Origin = payload.position + N * 0.001; // Æ«ÒÆÆğµã·ÀÖ¹×ÔÕÚµ² (Shadow Acne)
+        // --- æ›´æ–°å…‰çº¿ ---
+        ray.Origin = payload.position + N * 0.001; // åç§»èµ·ç‚¹é˜²æ­¢è‡ªé®æŒ¡ (Shadow Acne)
         ray.Direction = next_dir;
     }
     
@@ -324,18 +324,18 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
     // Write entity ID to the ID buffer
     // If no hit, write -1; otherwise write the instance ID
     
-    // Èç¹ûÃ»ÓĞ NaN (°²È«¼ì²é)
+    // å¦‚æœæ²¡æœ‰ NaN (å®‰å…¨æ£€æŸ¥)
     if (any(isnan(radiance)))
         radiance = float3(0, 0, 0);
 
     output[pixel_coords] = float4(radiance, 1.0);
 
-    // ÀÛ»ıÂß¼­
+    // ç´¯ç§¯é€»è¾‘
     float4 prev_color = accumulated_color[pixel_coords];
     int prev_samples = accumulated_samples[pixel_coords];
     
-    // Èç¹ûÏà»úÒÆ¶¯ÁË£¬Í¨³£ CPU ¶Ë»áÖØÖÃ accumulated_samples Îª 0
-    // ¼òµ¥µÄÆ½¾ùËã·¨£º NewAverage = (OldSum + NewSample) / N
+    // å¦‚æœç›¸æœºç§»åŠ¨äº†ï¼Œé€šå¸¸ CPU ç«¯ä¼šé‡ç½® accumulated_samples ä¸º 0
+    // ç®€å•çš„å¹³å‡ç®—æ³•ï¼š NewAverage = (OldSum + NewSample) / N
     if (prev_samples == 0)
     {
         accumulated_color[pixel_coords] = float4(radiance, 1.0);
@@ -346,8 +346,8 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
     }
     accumulated_samples[pixel_coords] = prev_samples + 1;
     
-    // Ğ´Èë entity ID (½öÕë¶ÔµÚÒ»´Î Hit£¬ĞèÒªµ¥¶À´¦Àí»òÔÚ bounce=0 Ê±Ğ´Èë)
-    // ¿ÉÒÔÔÚ bounce loop Àï¼Ó¸ö if (bounce == 0) entity_id_output[...] = ...
+    // å†™å…¥ entity ID (ä»…é’ˆå¯¹ç¬¬ä¸€æ¬¡ Hitï¼Œéœ€è¦å•ç‹¬å¤„ç†æˆ–åœ¨ bounce=0 æ—¶å†™å…¥)
+    // å¯ä»¥åœ¨ bounce loop é‡ŒåŠ ä¸ª if (bounce == 0) entity_id_output[...] = ...
 }
 
 [shader("miss")] void MissMain(inout RayPayload payload) {
@@ -391,26 +391,26 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
 {
     payload.hit = true;
 
-    // »ñÈ¡ÊµÀı/²ÄÖÊË÷Òı
+    // è·å–å®ä¾‹/æè´¨ç´¢å¼•
     uint instance_idx = InstanceID();
     payload.instance_id = instance_idx;
   
-    // barycentrics: attr.barycentrics ÊÇ float2 (u,v)£¬µÚÈı·ÖÁ¿Îª 1-u-v
+    // barycentrics: attr.barycentrics æ˜¯ float2 (u,v)ï¼Œç¬¬ä¸‰åˆ†é‡ä¸º 1-u-v
     float2 bary2 = attr.barycentrics;
     float3 b = float3(1.0 - bary2.x - bary2.y, bary2.x, bary2.y);
   
-    // È¡µÃÈı½ÇĞÎË÷ÒıºÍ¶¥µãÎ»ÖÃ
+    // å–å¾—ä¸‰è§’å½¢ç´¢å¼•å’Œé¡¶ç‚¹ä½ç½®
     uint prim = PrimitiveIndex();
     // payload.instance_id = prim;
   
     //printf("Hit triangle index: %d", prim, "\n");
 
-    // ¼ÓÔØ²ÄÖÊ
+    // åŠ è½½æè´¨
     Material mat = materials[instance_idx];
 
-    // ---------- Ç¿ÖÆÂş·´Éä¼ÆËã ----------
-    // 1. »ñÈ¡ÊÀ½ç¿Õ¼ä·¨Ïß
-    float3 world_normal = normalize(float3(0, 0, 0)); // TODO: Ìæ»»ÎªÕæÊµÈı½ÇĞÎ·¨Ïß
+    // ---------- å¼ºåˆ¶æ¼«åå°„è®¡ç®— ----------
+    // 1. è·å–ä¸–ç•Œç©ºé—´æ³•çº¿
+    float3 world_normal = normalize(float3(0, 0, 0)); // TODO: æ›¿æ¢ä¸ºçœŸå®ä¸‰è§’å½¢æ³•çº¿
     
     
     EntityInfo entity_info = entity_infos[instance_idx];
@@ -421,43 +421,43 @@ float3 CalculateDirectLight(in float3 hitPos, in float3 N, in Material mat, inou
     if ((v0.normal.x == 0 && v0.normal.y == 0 && v0.normal.z == 0) ||
         (v1.normal.x == 0 && v1.normal.y == 0 && v1.normal.z == 0) ||
         (v2.normal.x == 0 && v2.normal.y == 0 && v2.normal.z == 0)) {
-        // Èç¹û¶¥µã·¨ÏßÈ«ÎªÁã£¬ÔòÊ¹ÓÃÃæ·¨Ïß
+        // å¦‚æœé¡¶ç‚¹æ³•çº¿å…¨ä¸ºé›¶ï¼Œåˆ™ä½¿ç”¨é¢æ³•çº¿
         float3 edge1 = v1.pos - v0.pos;
         float3 edge2 = v2.pos - v0.pos;
         float3 face_normal = cross(edge1, edge2);
         world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
     } else {
-        // Ê¹ÓÃ²åÖµºóµÄ¶¥µã·¨Ïß
+        // ä½¿ç”¨æ’å€¼åçš„é¡¶ç‚¹æ³•çº¿
         float3 face_nromal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
         world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_nromal));
     }
   
     /*
-    // 2. Æ½ĞĞ¹â·½Ïò (0, 0, -1)
+    // 2. å¹³è¡Œå…‰æ–¹å‘ (0, 0, -1)
     float3 light_dir = normalize(float3(0, -1, 0));
 
-    // 3. ¼ÆËã Lambert Âş·´ÉäÏµÊı N¡¤L
+    // 3. è®¡ç®— Lambert æ¼«åå°„ç³»æ•° NÂ·L
     float ndotl = max(dot(world_normal, -light_dir), 0.0);
-    // ×¢ÒâÕâÀïÈ¡¸ººÅ£¬ÒòÎª¹âÕÕ·½ÏòÊÇ´Ó¹âÔ´Ö¸Ïò±íÃæ
+    // æ³¨æ„è¿™é‡Œå–è´Ÿå·ï¼Œå› ä¸ºå…‰ç…§æ–¹å‘æ˜¯ä»å…‰æºæŒ‡å‘è¡¨é¢
 
-    // 4. ³ËÒÔ²ÄÖÊ»ùÉ«µÃµ½×îÖÕÂş·´ÉäÑÕÉ«
+    // 4. ä¹˜ä»¥æè´¨åŸºè‰²å¾—åˆ°æœ€ç»ˆæ¼«åå°„é¢œè‰²
     float3 diffuse = mat.base_color * ndotl;
     //float3 diffuse = world_normal;
 
-    // Êä³öµ½ RayPayload
+    // è¾“å‡ºåˆ° RayPayload
     payload.color = diffuse;
     */
     
-    // ¼ÆËã»÷ÖĞµãµÄÊÀ½ç×ø±ê (ÓÃÓÚÏÂÒ»Ìõ¹âÏßµÄÆğµã)
+    // è®¡ç®—å‡»ä¸­ç‚¹çš„ä¸–ç•Œåæ ‡ (ç”¨äºä¸‹ä¸€æ¡å…‰çº¿çš„èµ·ç‚¹)
     float3 world_pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
     
-    // === ½«Êı¾İĞ´Èë Payload ===
+    // === å°†æ•°æ®å†™å…¥ Payload ===
     payload.position = world_pos;
-    payload.normal = world_normal; // È·±£·¨Ïß¹éÒ»»¯
+    payload.normal = world_normal; // ç¡®ä¿æ³•çº¿å½’ä¸€åŒ–
     payload.albedo = mat.base_color;
     payload.roughness = mat.roughness;
     payload.metallic = mat.metallic;
-    //payload.emission = float3(0, 0, 0); // ÔİÊ±ÉèÎª0£¬³ı·ÇÄãµÄ²ÄÖÊ½á¹¹ÌåÀïÓĞ emission
+    //payload.emission = float3(0, 0, 0); // æš‚æ—¶è®¾ä¸º0ï¼Œé™¤éä½ çš„æè´¨ç»“æ„ä½“é‡Œæœ‰ emission
     if (payload.cal_emission)
         payload.emission = mat.emission;
 }

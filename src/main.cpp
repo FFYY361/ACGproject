@@ -1,4 +1,4 @@
-#include "app.h"
+﻿#include "app.h"
 
 int main() {
   // Create only one application instance to avoid ImGui conflicts

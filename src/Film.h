@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "long_march.h"
 
 // Film class for accumulating ray tracing samples over time

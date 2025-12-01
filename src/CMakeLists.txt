@@ -1,4 +1,4 @@
-file(GLOB_RECURSE DEMO_SOURCES "*.cpp" "*.h")
+﻿file(GLOB_RECURSE DEMO_SOURCES "*.cpp" "*.h")
 
 add_executable(ShortMarchDemo ${DEMO_SOURCES})
 

@@ -1,4 +1,4 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "glm/gtc/matrix_transform.hpp"
 
 Scene::Scene(grassland::graphics::Core* core)

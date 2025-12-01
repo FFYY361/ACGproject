@@ -1,4 +1,4 @@
-#include "app.h"
+﻿#include "app.h"
 #include "Material.h"
 #include "Entity.h"
 
@@ -555,7 +555,7 @@ void Application::RenderInfoOverlay() {
     ImGui::SeparatorText("Camera");
     ImGui::Text("Position: (%.2f, %.2f, %.2f)", camera_pos_.x, camera_pos_.y, camera_pos_.z);
     ImGui::Text("Direction: (%.2f, %.2f, %.2f)", camera_front_.x, camera_front_.y, camera_front_.z);
-    ImGui::Text("Yaw: %.1f°  Pitch: %.1f°", yaw_, pitch_);
+    ImGui::Text("Yaw: %.1f掳  Pitch: %.1f掳", yaw_, pitch_);
     ImGui::Text("Speed: %.3f", camera_speed_);
     ImGui::Text("Sensitivity: %.2f", mouse_sensitivity_);
 
