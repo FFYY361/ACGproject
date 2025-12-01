@@ -20,7 +20,6 @@ struct Vertex {
 
 struct Light
 {
-    bool type; // 0: Point, 1: Area
     glm::vec3 position; // Point light position or Area light center
     glm::vec3 color; // Light intensity/color (e.g., float3(10, 10, 10))
 
@@ -28,8 +27,13 @@ struct Light
     glm::vec3 u; // Area light edge vector U
     glm::vec3 v; // Area light edge vector V
     float area; // Surface area
+    uint32_t type; // 0: Point, 1: Area
 
 	Light() : type(0), position(0.0f), color(1.0f), u(0.0f), v(0.0f), area(0.0f) {}
+    Light(bool type, const glm::vec3& position, const glm::vec3& color,
+          const glm::vec3& u = glm::vec3(0.0f), const glm::vec3& v = glm::vec3(0.0f), float area = 0.0f)
+		: type(type), position(position), color(color), u(u), v(v), area(area) {
+	}
 };
 
 struct LightInfo

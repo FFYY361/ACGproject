@@ -224,7 +224,7 @@ void Application::OnInit() {
     // Ground plane - a cube scaled to be flat
     {
         auto ground = std::make_shared<Entity>(
-            "meshes/cube.obj",
+            PROJECT_DIR "/meshes/cube.obj",
             Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.8f, 0.0f),
             glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f)), 
                       glm::vec3(10.0f, 0.1f, 10.0f))
@@ -235,7 +235,7 @@ void Application::OnInit() {
     // Red sphere (using octahedron as sphere substitute)
     {
         auto red_sphere = std::make_shared<Entity>(
-            "meshes/octahedron.obj",
+            PROJECT_DIR "/meshes/sphere.obj",
             Material(glm::vec3(1.0f, 1.0f, 0.0f), 0.3f, 0.0f),
             glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.5f, 0.0f))
         );
@@ -245,8 +245,8 @@ void Application::OnInit() {
     // Green metallic sphere
     {
         auto green_sphere = std::make_shared<Entity>(
-            "meshes/octahedron.obj",
-            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.9f),
+            PROJECT_DIR "/meshes/sphere.obj",
+            Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.0f, 1.0f),
             glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f))
         );
         scene_->AddEntity(green_sphere);
@@ -255,11 +255,21 @@ void Application::OnInit() {
     // Blue cube
     {
         auto blue_cube = std::make_shared<Entity>(
-            "meshes/cube.obj",
-            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 0.0f),
+            PROJECT_DIR "/meshes/cube.obj",
+            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 1.0f),
             glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.5f, 0.0f))
         );
         scene_->AddEntity(blue_cube);
+    }
+
+    {
+        // Light source - a small emissive cube above the scene
+        auto light = std::make_shared<Light>(
+            0,
+            glm::vec3(0.0f, 2.0f, 0.0f),
+            glm::vec3(5.0f, 5.0f, 5.0f)
+        );
+		scene_->AddLight(light);
     }
 
     // Build acceleration structures
@@ -313,6 +323,7 @@ void Application::OnInit() {
 
 	grassland::LogInfo("Current Work Directory: {}", std::filesystem::current_path().string());
 
+	auto SHADERS_DIR = PROJECT_DIR "/src/shaders";
     auto shader_vfs = grassland::VirtualFileSystem::LoadDirectory(SHADERS_DIR);
     //E:/2025-2026F/AdvancedComputerGraphics/project/ACGproject/src/shaders
 

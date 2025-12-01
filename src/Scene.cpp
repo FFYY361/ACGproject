@@ -28,13 +28,36 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         return;
     }
     lights_.push_back(*light);
+    const float scale = 0.09f;
+    glm::vec3 pos = light->position;
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
     if (light->type == 0) { // Point light
-        auto point_sphere = std::make_shared<Entity>(
-            "meshes/sphere.obj",
-            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.0f, 0.0f, light->color),
-			glm::scale(glm::translate(glm::mat4(1.0f), light->position), glm::vec3(0.1f))
+        glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
+        auto point_light = std::make_shared<Entity>(
+            PROJECT_DIR "/meshes/sphere.obj",
+            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, light->color),
+		    T*S
         );
-        AddEntity(point_sphere);
+        AddEntity(point_light);
+	}
+    if (light->type == 1) { // Area light
+
+		glm::vec3 u = light->u * 0.5f;
+		glm::vec3 v = light->v * 0.5f;
+        glm::vec3 normal_dir = glm::normalize(glm::cross(u, v));
+        glm::vec3 w = scale * normal_dir; 
+        glm::mat4 R(1.0f);
+        R[0] = glm::vec4(u, 0.0f);
+        R[1] = glm::vec4(v, 0.0f);
+        R[2] = glm::vec4(w, 0.0f);
+
+
+        auto area_light = std::make_shared<Entity>(
+            PROJECT_DIR "/meshes/cube.obj",
+			Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color),
+			T * R
+		);
+        AddEntity(area_light);
 	}
     grassland::LogInfo("Added light to scene (total: {})", lights_.size());
 }
@@ -289,5 +312,6 @@ void Scene::UpdateBuffers() {
                           &light_info_buffer_);
 	}
 	light_info_buffer_->UploadData(&light_info_, light_info_buffer_size);
+	grassland::LogInfo("The type of first light: {}", lights_[0].type);
 
 }
