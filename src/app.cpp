@@ -1,6 +1,7 @@
 ﻿#include "app.h"
 #include "Material.h"
 #include "Entity.h"
+#include "SceneBuilder.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 #include "imgui.h"
@@ -213,6 +214,8 @@ void Application::OnInit() {
     hovered_entity_id_ = -1; // No entity hovered initially
     hovered_pixel_color_ = glm::vec4(0.0f); // No pixel color initially
     selected_entity_id_ = -1; // No entity selected initially
+    current_scene_index_ = 0; // Default scene
+    pending_scene_index_ = -1; // No pending scene switch
     mouse_x_ = 0.0;
     mouse_y_ = 0.0;
     // Don't grab cursor initially - user can right-click to enable camera mode
@@ -220,50 +223,15 @@ void Application::OnInit() {
     // Create scene
     scene_ = std::make_unique<Scene>(core_.get());
 
-    // Add entities to the scene
-    // Ground plane - a cube scaled to be flat
-    {
-        auto ground = std::make_shared<Entity>(
-            "meshes/cube.obj",
-            Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.8f, 0.0f),
-            glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f)), 
-                      glm::vec3(10.0f, 0.1f, 10.0f))
-        );
-        scene_->AddEntity(ground);
-    }
-
-    // Red sphere (using octahedron as sphere substitute)
-    {
-        auto red_sphere = std::make_shared<Entity>(
-            "meshes/octahedron.obj",
-            Material(glm::vec3(1.0f, 1.0f, 0.0f), 0.3f, 0.0f),
-            glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.5f, 0.0f))
-        );
-        scene_->AddEntity(red_sphere);
-    }
-
-    // Green metallic sphere
-    {
-        auto green_sphere = std::make_shared<Entity>(
-            "meshes/octahedron.obj",
-            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.9f),
-            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f))
-        );
-        scene_->AddEntity(green_sphere);
-    }
-
-    // Blue cube
-    {
-        auto blue_cube = std::make_shared<Entity>(
-            "meshes/cube.obj",
-            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 0.0f),
-            glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.5f, 0.0f))
-        );
-        scene_->AddEntity(blue_cube);
-    }
-
-    // Build acceleration structures
-    scene_->BuildAccelerationStructures();
+    // Build the scene using SceneBuilder
+    // You can switch between different scenes by changing the function call:
+    // SceneBuilder::BuildDefaultScene(scene_.get());
+    // SceneBuilder::BuildCornellBox(scene_.get());
+    // SceneBuilder::BuildTestScene(scene_.get());
+    // SceneBuilder::BuildMaterialShowcase(scene_.get());
+    // SceneBuilder::BuildMyCustomScene(scene_.get());
+    
+    SceneBuilder::BuildDefaultScene(scene_.get());
 
     // Create film for accumulation
     film_ = std::make_unique<Film>(core_.get(), window_->GetWidth(), window_->GetHeight());
@@ -417,6 +385,44 @@ void Application::OnUpdate() {
         return;  // Exit update immediately after closing
     }
     if (alive_) {
+        // Process pending scene switch BEFORE any rendering
+        if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
+            const char* scene_names[] = {
+                "Default Scene", "Cornell Box", "Test Scene",
+                "Material Showcase", "Empty Scene", "My Custom Scene"
+            };
+            
+            grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
+            
+            // Wait for GPU to finish any pending work before destroying old scene
+            core_->WaitGPU();
+            
+            switch (pending_scene_index_) {
+                case 0: SceneBuilder::BuildDefaultScene(scene_.get()); break;
+                case 1: SceneBuilder::BuildCornellBox(scene_.get()); break;
+                case 2: SceneBuilder::BuildTestScene(scene_.get()); break;
+                case 3: SceneBuilder::BuildMaterialShowcase(scene_.get()); break;
+                case 4: SceneBuilder::BuildEmptyScene(scene_.get()); break;
+                case 5: SceneBuilder::BuildMyCustomScene(scene_.get()); break;
+            }
+            
+            // Wait for scene rebuild to complete
+            // core_->WaitGPU();
+            
+            // Reset accumulation and selection after scene change
+            film_->Reset();
+            
+            // Wait for film reset to complete
+            // core_->WaitGPU();
+            
+            selected_entity_id_ = -1;
+            hovered_entity_id_ = -1;
+            current_scene_index_ = pending_scene_index_;
+            pending_scene_index_ = -1;
+            
+            grassland::LogInfo("Scene switch completed successfully");
+        }
+        
         // Process keyboard input to move camera
         ProcessInput();
         
@@ -782,6 +788,52 @@ void Application::RenderEntityPanel() {
     ImGui::End();
 }
 
+void Application::RenderSceneSelector() {
+    // Only show scene selector when camera is disabled and UI is not hidden
+    if (camera_enabled_ || ui_hidden_) {
+        return;
+    }
+
+    // Create a floating window at the top center
+    float window_width = 400.0f;
+    ImGui::SetNextWindowPos(ImVec2((window_->GetWidth() - window_width) / 2.0f, 20.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(window_width, 0.0f), ImGuiCond_Always);
+    
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoMove | 
+                                     ImGuiWindowFlags_NoResize | 
+                                     ImGuiWindowFlags_NoCollapse |
+                                     ImGuiWindowFlags_AlwaysAutoResize;
+    
+    if (!ImGui::Begin("Scene Selector", nullptr, window_flags)) {
+        ImGui::End();
+        return;
+    }
+
+    const char* scene_names[] = {
+        "Default Scene",
+        "Cornell Box",
+        "Test Scene",
+        "Material Showcase",
+        "Empty Scene",
+        "My Custom Scene"
+    };
+    
+    ImGui::Text("Select Scene:");
+    ImGui::SetNextItemWidth(-1);
+    
+    // Use a temporary variable for the combo to avoid changing current_scene_index_ during rendering
+    int selected_index = current_scene_index_;
+    if (ImGui::Combo("##scene_select", &selected_index, scene_names, IM_ARRAYSIZE(scene_names))) {
+        // Scene selection changed - request switch for next frame
+        if (selected_index != current_scene_index_) {
+            pending_scene_index_ = selected_index;
+            grassland::LogInfo("Scene switch requested: {}", scene_names[selected_index]);
+        }
+    }
+    
+    ImGui::End();
+}
+
 void Application::OnRender() {
     // Don't render if window is closing
     if (!alive_) {
@@ -829,6 +881,7 @@ void Application::OnRender() {
     window_->BeginImGuiFrame();
     RenderInfoOverlay();
     RenderEntityPanel();
+    RenderSceneSelector();
     window_->EndImGuiFrame();
     
     command_context->CmdPresent(window_.get(), display_image);

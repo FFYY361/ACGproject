@@ -21,6 +21,7 @@ public:
     void OnRender();
     void UpdateHoveredEntity(); // Update which entity the mouse is hovering over
     void RenderEntityPanel(); // Render entity inspector panel on the right
+    void RenderSceneSelector(); // Render scene selector dropdown
 
     bool IsAlive() const {
         return alive_;
@@ -90,4 +91,8 @@ private:
     
     // Entity selection
     int selected_entity_id_; // -1 if no entity selected
+    
+    // Scene selection
+    int current_scene_index_; // Index of currently loaded scene
+    int pending_scene_index_; // Pending scene switch request (-1 if none)
 };
