@@ -63,7 +63,6 @@ struct RayPayload
 
 struct Light
 {
-    bool type; // 0: Point, 1: Area
     float3 position; // Point light position or Area light center
     float3 color; // Light intensity/color (e.g., float3(10, 10, 10))
     
@@ -71,6 +70,7 @@ struct Light
     float3 u; // Area light edge vector U
     float3 v; // Area light edge vector V
     float area; // Surface area
+    uint type; // 0: Point, 1: Area
 };
 
 // ==================== 全局资源绑定 ====================

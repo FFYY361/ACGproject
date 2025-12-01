@@ -281,6 +281,7 @@ void Application::OnInit() {
 
 	grassland::LogInfo("Current Work Directory: {}", std::filesystem::current_path().string());
 
+	auto SHADERS_DIR = PROJECT_DIR "/src/shaders";
     auto shader_vfs = grassland::VirtualFileSystem::LoadDirectory(SHADERS_DIR);
     //E:/2025-2026F/AdvancedComputerGraphics/project/ACGproject/src/shaders
 
