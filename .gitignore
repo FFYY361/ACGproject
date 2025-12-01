@@ -3,6 +3,7 @@ cmake-build-*/
 .vscode/
 .idea/
 .vs/
+.cache/
 
 out/
 CMakeSettings.json
@@ -21,3 +22,4 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+imgui.ini
