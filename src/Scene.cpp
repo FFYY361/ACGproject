@@ -28,10 +28,10 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         return;
     }
     lights_.push_back(*light);
-    const float scale = 0.09f;
     glm::vec3 pos = light->position;
-    glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
     if (light->type == 0) { // Point light
+        const float scale = 0.09f;
+        glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
         glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
         auto point_light = std::make_shared<Entity>(
             PROJECT_DIR "/meshes/sphere.obj",
@@ -41,7 +41,7 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         AddEntity(point_light);
 	}
     if (light->type == 1) { // Area light
-
+        const float scale = 0.009f;
 		glm::vec3 u = light->u * 0.5f;
 		glm::vec3 v = light->v * 0.5f;
         glm::vec3 normal_dir = glm::normalize(glm::cross(u, v));
@@ -50,6 +50,7 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         R[0] = glm::vec4(u, 0.0f);
         R[1] = glm::vec4(v, 0.0f);
         R[2] = glm::vec4(w, 0.0f);
+        glm::mat4 T = glm::translate(glm::mat4(1.0f), pos - scale * w);
 
 
         auto area_light = std::make_shared<Entity>(

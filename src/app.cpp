@@ -256,7 +256,7 @@ void Application::OnInit() {
     {
         auto blue_cube = std::make_shared<Entity>(
             PROJECT_DIR "/meshes/cube.obj",
-            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 1.0f),
+            Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 0.0f),
             glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.5f, 0.0f))
         );
         scene_->AddEntity(blue_cube);
@@ -269,7 +269,19 @@ void Application::OnInit() {
             glm::vec3(0.0f, 2.0f, 0.0f),
             glm::vec3(5.0f, 5.0f, 5.0f)
         );
-		scene_->AddLight(light);
+		// scene_->AddLight(light);
+    }
+
+    {
+        auto light = std::make_shared<Light>(
+            1,
+            glm::vec3(0.0f, 2.0f, 2.0f),
+            glm::vec3(10.0f, 10.0f, 10.0f),
+            glm::vec3(0.0f, 0.5f, -1.0f),
+            glm::vec3(1.0f, 0.0f, 0.0f),
+            1.0f
+        );
+        scene_->AddLight(light);
     }
 
     // Build acceleration structures
