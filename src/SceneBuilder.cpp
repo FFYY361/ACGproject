@@ -39,17 +39,32 @@ std::shared_ptr<Entity> SceneBuilder::CreateCube(
     );
 }
 
-std::shared_ptr<Entity> SceneBuilder::CreateLight(
+std::shared_ptr<Light> SceneBuilder::CreatePointLight(
     const glm::vec3& position,
-    const glm::vec3& emission,
-    const glm::vec3& scale
+    const glm::vec3& color
 ) {
-	return NULL;  // Temporarily disable light creation via this function
-    /*return std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/cube.obj",
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, emission),
-        glm::scale(glm::translate(glm::mat4(1.0f), position), scale)
-    );*/
+    return std::make_shared<Light>(
+        0,  // type: 0 = Point light
+        position,
+        color
+    );
+}
+
+std::shared_ptr<Light> SceneBuilder::CreateAreaLight(
+    const glm::vec3& position,
+    const glm::vec3& color,
+    const glm::vec3& u,
+    const glm::vec3& v
+) {
+    float area = glm::length(glm::cross(u, v));
+    return std::make_shared<Light>(
+        1,  // type: 1 = Area light
+        position,
+        color,
+        u,
+        v,
+        area
+    );
 }
 
 // ===== Pre-defined Scenes =====

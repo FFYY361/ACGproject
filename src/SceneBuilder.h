@@ -47,9 +47,16 @@ private:
         const Material& material = Material()
     );
     
-    static std::shared_ptr<Entity> CreateLight(
+    // Light creation helpers (returns Light struct, not Entity)
+    static std::shared_ptr<Light> CreatePointLight(
         const glm::vec3& position,
-        const glm::vec3& emission = glm::vec3(10.0f),
-        const glm::vec3& scale = glm::vec3(0.5f)
+        const glm::vec3& color = glm::vec3(10.0f)
+    );
+    
+    static std::shared_ptr<Light> CreateAreaLight(
+        const glm::vec3& position,
+        const glm::vec3& color,
+        const glm::vec3& u,
+        const glm::vec3& v
     );
 };

@@ -12,6 +12,6 @@ add_subdirectory(external/LongMarch)
 add_subdirectory(src)
 
 target_compile_definitions(ShortMarchDemo PRIVATE
-    # ¶¨ÒåÒ»¸öÃûÎª SHADERS_DIR µÄºê£¬ÖµÎª¾ø¶ÔÂ·¾¶×Ö·û´®
+    # å®šä¹‰ä¸€ä¸ªåä¸º SHADERS_DIR çš„å®ï¼Œå€¼ä¸ºç»å¯¹è·¯å¾„å­—ç¬¦ä¸²
     PROJECT_DIR="${PROJECT_SOURCE_DIR}"
 )
