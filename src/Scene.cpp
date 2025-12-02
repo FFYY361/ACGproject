@@ -27,6 +27,10 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         grassland::LogError("Cannot add invalid light to scene");
         return;
     }
+    if (lights_.size() < entities_.size()) {
+		grassland::LogError("MUST add lights before adding entities to the scene, now have {} lights and {} entities",
+            lights_.size(), entities_.size());
+    }
     lights_.push_back(*light);
     glm::vec3 pos = light->position;
     if (light->type == 0) { // Point light
@@ -34,8 +38,8 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
         glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
         auto point_light = std::make_shared<Entity>(
-            PROJECT_DIR "/meshes/sphere.obj",
-            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, light->color),
+            PROJECT_DIR "/meshes/simple_sphere.obj",
+            Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color),
 		    T*S
         );
         AddEntity(point_light);

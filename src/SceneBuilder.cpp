@@ -71,7 +71,26 @@ std::shared_ptr<Light> SceneBuilder::CreateAreaLight(
 
 void SceneBuilder::BuildDefaultScene(Scene* scene) {
     scene->Clear();
-    
+
+    // Light source - a small emissive cube above the scene
+    auto light = std::make_shared<Light>(
+        0,
+        glm::vec3(0.0f, 2.0f, 1.0f),
+        glm::vec3(15.0f, 15.0f, 15.0f)
+    );
+    scene->AddLight(light);
+
+    /*auto light = std::make_shared<Light>(
+        1,
+        glm::vec3(0.0f, 2.0f, 0.0f),
+        glm::vec3(15.0f, 15.0f, 15.0f),
+        glm::vec3(0.0f, 0.0f, -0.1f),
+        glm::vec3(0.1f, 0.0f, 0.0f),
+        0.1f
+    );
+    scene->AddLight(light);*/
+
+
     // Ground plane
     scene->AddEntity(CreateGroundPlane());
     
@@ -79,32 +98,23 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     scene->AddEntity(CreateSphere(
         glm::vec3(-2.0f, 0.5f, 0.0f),
         0.5f,
-        Material(glm::vec3(1.0f, 1.0f, 0.0f), 0.3f, 0.0f)
+        Material(glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, 0.0f)
     ));
     
     // Metallic white sphere
     scene->AddEntity(CreateSphere(
         glm::vec3(0.0f, 0.5f, 0.0f),
         0.5f,
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.9f)
+        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.1f, 1.0f)
     ));
     
     // Blue cube
     scene->AddEntity(CreateCube(
         glm::vec3(2.0f, 0.5f, 0.0f),
         glm::vec3(1.0f, 1.0f, 1.0f),
-        Material(glm::vec3(0.2f, 0.2f, 1.0f), 0.5f, 0.0f)
+        Material(glm::vec3(0.0f, 0.0f, 1.0f), 1.0f, 0.0f)
     ));
 
-    {
-        // Light source - a small emissive cube above the scene
-        auto light = std::make_shared<Light>(
-            0,
-            glm::vec3(0.0f, 2.0f, 1.0f),
-            glm::vec3(8.0f, 8.0f, 8.0f)
-        );
-         scene->AddLight(light);
-    }
     
     scene->BuildAccelerationStructures();
 }
@@ -114,7 +124,17 @@ void SceneBuilder::BuildCornellBox(Scene* scene) {
     
     float box_size = 2.0f;
     float wall_thickness = 0.1f;
-    
+
+    auto light = std::make_shared<Light>(
+        1,
+        glm::vec3(0.0f, box_size - 0.15f, 0.0f),
+        glm::vec3(15.0f, 15.0f, 15.0f),
+        glm::vec3(0.0f, 0.0f, -1.0f),
+        glm::vec3(1.0f, 0.0f, 0.0f),
+        1.0f
+    );
+    scene->AddLight(light);
+
     // Floor (white)
     scene->AddEntity(CreateGroundPlane(
         glm::vec3(0.0f, -box_size, 0.0f),
@@ -171,15 +191,6 @@ void SceneBuilder::BuildCornellBox(Scene* scene) {
         glm::vec3(0.5f, 0.05f, 0.5f)
     ));*/
 
-    auto light = std::make_shared<Light>(
-        1,
-        glm::vec3(0.0f, box_size - 0.15f, 0.0f),
-        glm::vec3(15.0f, 15.0f, 15.0f),
-        glm::vec3(0.0f, 0.0f, -1.0f),
-        glm::vec3(1.0f, 0.0f, 0.0f),
-        1.0f
-    );
-    scene->AddLight(light);
     
     scene->BuildAccelerationStructures();
 }
@@ -262,7 +273,7 @@ void SceneBuilder::BuildMaterialShowcase(Scene* scene) {
     ));
     
     // Light
-    scene->AddEntity(CreateLight(
+    scene->AddLight(CreatePointLight(
         glm::vec3(0.0f, 4.0f, 0.0f),
         glm::vec3(20.0f, 20.0f, 20.0f)
     ));

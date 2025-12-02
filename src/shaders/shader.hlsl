@@ -2,6 +2,42 @@
 // 1. 引入其他模块
 #include "common.hlsli"
 #include "random.hlsli"
+#include "material.hlsl"
+
+void GetLightInfo(
+    in Light light, in float3 P, in float3 light_pos,
+    out float3 intensity, out float pdf_solid, out float3 dir, out float dist)
+{
+    if (light.type == 0)
+    {
+        // 点光源
+        float3 toLight = light.position - P;
+        dist = length(toLight);
+        dir = normalize(toLight);
+        intensity = light.color;
+        float pdf = 1.0;
+        pdf_solid = pdf * (dist * dist); // Dirac delta
+    }
+    else
+    {
+        // 面光源
+        // 简单均匀采样
+        float3 toLight = light_pos - P;
+        dist = length(toLight);
+        dir = normalize(toLight);
+        float3 lightNormal = normalize(cross(light.u, light.v));
+        float cosLight = max(dot(-normalize(toLight), lightNormal), 0.0);
+        
+        intensity = light.color;
+        float pdf = 1.0 / light.area;
+        pdf_solid = pdf * (dist * dist) / max(cosLight, 0.001);
+    }
+}
+
+
+
+
+
 
 [shader("raygeneration")] void RayGenMain()
 {
@@ -42,13 +78,17 @@
     float3 throughput = float3(1.0, 1.0, 1.0);
     float3 radiance = float3(0.0, 0.0, 0.0);
     
+
+    float last_brdf_pdf = -1.0;
+    float3 last_hit_pos = float3(0.0, 0.0, 0.0);
+    
     RayPayload payload;
     payload.instance_id = -1; // 初始为无效 ID
     payload.cal_emission = true;
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，例如 3 或 5
-    for (int bounce = 0; bounce < 5; bounce++)
+    for (int bounce = 0; bounce < 2; bounce++)
     {
         payload.hit = false;
         
@@ -67,18 +107,39 @@
 
         // --- Case 2: Hit (击中物体) ---
         
-        // (可选) 累加自发光 emission
-        radiance += throughput * payload.emission;
-        // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
-        if (length(payload.emission) > 1.0)
-        {
-            break;
-        }
-
-        // 准备下一次反弹的数据
         float3 P = payload.position;
         float3 N = payload.normal;
         float3 V = -ray.Direction; // 视线方向
+        
+        // (可选) 累加自发光 emission
+        // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
+        if (length(payload.emission) > 0.01)
+        {
+            // 我们需要计算 MIS 权重： w_b = p_b^2 / (p_b^2 + p_l^2)
+            // p_b 是上一轮决定射向这里的 BSDF PDF (我们需要在上一轮循环结束前存下来)
+            // p_l 是如果用 NEE 采样这个点，得到的 PDF (Solid Angle)
+            
+            Light light = lights[payload.instance_id]; // 光源必定先于entity创建，因此instance_id可用来索引lights数组
+            float mis_indirect = 1.0f;
+            float3 L_dir;
+            float dist;
+            float3 L_intensity;
+            float light_pdf_solid = 0.0;
+            
+            /*if (light.type != 0)
+            {
+            }*/
+            GetLightInfo(light, last_hit_pos, payload.position, L_intensity, light_pdf_solid, L_dir, dist);
+            if (last_brdf_pdf < 0)
+                mis_indirect = 1.0f;
+            else
+                mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
+        
+            radiance += throughput * payload.emission * mis_indirect;
+            //radiance = float3(0, 0, 0); // 遇到自发光直接结束
+            break;
+        }
+        //radiance = payload.metallic;
         
         float3 directLightContrib = float3(0, 0, 0);
         
@@ -90,109 +151,95 @@
             float3 L_dir;
             float dist;
             float3 L_intensity;
-            float light_pdf;
-
-        // --- 3.1 光源采样 ---
-            if (light.type == 0)
+            float light_pdf_solid = 1.0;
+            
+            // --- 3.1 计算光源信息 ---
+            float3 light_pos = light.position; // 对于面光源，这里应该是采样位置
+            if (light.type == 1)
             {
-                float3 toLight = light.position - P;
-                dist = length(toLight);
-                L_dir = normalize(toLight);
-                L_intensity = light.color / (dist * dist);
-                light_pdf = 1.0;
-            }
-            else
-            { // AREA LIGHT
-            // 简单的均匀采样
+                // 面光源，随机采样光源表面位置
                 float r1 = next_rand(seed);
                 float r2 = next_rand(seed);
-            // 假设 Light 是个平面 Quad，定义在 position, u, v
-                float3 samplePos = light.position + light.u * (r1 - 0.5) + light.v * (r2 - 0.5);
-                float3 toLight = samplePos - P;
-                dist = length(toLight);
-                L_dir = normalize(toLight);
-            
-            // 几何项 G = cos(theta_light) / dist^2
-                float3 lightNormal = normalize(cross(light.u, light.v)); // 确保 Light 结构体里有这个或能计算
-                float cosLight = max(dot(-L_dir, lightNormal), 0.0);
-            
-                L_intensity = light.color * cosLight / (dist * dist);
-                light_pdf = 1.0 / light.area;
+                light_pos = light.position + light.u * (r1 - 0.5) + light.v * (r2 - 0.5);
             }
+            GetLightInfo(light, P, light_pos, L_intensity, light_pdf_solid, L_dir, dist);
 
-        // --- 3.2 阴影射线 (Shadow Ray) ---
+            // --- 3.2 阴影射线 (Shadow Ray) ---
             RayDesc shadowRay;
             shadowRay.Origin = P + N * 0.001; // Bias
             shadowRay.Direction = L_dir;
             shadowRay.TMin = 0.001;
             shadowRay.TMax = dist - 0.1; // 防止打到光源自己
-
-        // 使用一个新的 Payload 或者简单的 bool
             RayPayload shadowPayload;
             shadowPayload.hit = true; // 默认被遮挡
-        
-        // 关键 Flag: SKIP_CLOSEST_HIT_SHADER | ACCEPT_FIRST_HIT_AND_END_SEARCH
-        // 这里的 instanceMask 和 hitGroupIndex 可能需要根据你的 Host 代码调整
-        // 假设 Shadow Miss Shader 在 index 1 (需要在 Host 设置 Shader Table)
-        // 如果没有单独的 Shadow Miss，就用通用的，并在 Miss Shader 里设置 hit = false
             TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
                  0xFF, 0, 1, 0, shadowRay, shadowPayload); // Miss shader index 设为 0 (通用) 或 1 (专用)
-
-        // 假设 Miss Shader 会把 shadowPayload.hit 设为 false
+            
             if (!shadowPayload.hit)
             {
-            // --- 3.3 计算 BRDF 贡献 ---
+                // --- 3.3 计算 BRDF 贡献 ---
                 float NdotL = max(dot(N, L_dir), 0.0);
-            
-            // 简单的 Diffuse BRDF = albedo / PI
-            // Result = Throughput * BRDF * L_incoming * NdotL / PDF
-            // 这里 throughput 是路径目前的衰减，不要更新 throughput，而是直接加到 radiance
-            
-                float3 brdf = payload.albedo / PI;
-            
-            // 注意：如果是金属(Metallic)，Diffuse 几乎为 0，这里简化处理
-                brdf *= (1.0 - payload.metallic);
-            
-                directLightContrib += throughput * brdf * L_intensity * NdotL / light_pdf;
+                float3 brdf = EvalPBR(N, V, L_dir, payload.albedo, payload.roughness, payload.metallic);
+                float mis_direct = 1.0;
+                
+                float bsdf_pdf = EvalBrdfPDF(N, V, L_dir, payload.albedo, payload.roughness, payload.metallic);
+                //if (light.type != 0)
+                mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
+                
+                directLightContrib += mis_direct * throughput * brdf * L_intensity * NdotL / light_pdf_solid;
             }
 
         }
         radiance += directLightContrib;
-        //radiance = float3(lightinfo.num_light, 0, 0); // 测试用，显示光源数量)
-        float3 next_dir;
         
-        // === 材质逻辑 (BSDF) ===
-        // 这里根据 Roughness 和 Metallic 简单区分 Diffuse 和 Specular
         
+        
+        
+        float3 next_dir = float3(0.0f, 0.0f, 0.0f);
+        // === 材质逻辑 (BRDF) ===
         float probability_specular = payload.metallic; // 简单的混合概率
         // 如果想更物理，应该使用 Fresnel 计算 specular 概率
         
-        if (next_rand(seed) < probability_specular)
+        
+        float3 albedo = payload.albedo;
+        float roughness = payload.roughness;
+        float metallic = payload.metallic;
+       
+        
+        
+        float spec_chance = GetSpecularChance(N, V, albedo, roughness, metallic);
+    
+        float3 H, L_bounce;
+        
+        
+        
+        if (next_rand(seed) < spec_chance)
         {
-            // --- Specular (镜面反射) ---
-            // 完美镜面反射: reflect(I, N). I 是入射光方向 (ray.Direction)
-            // 如果要支持粗糙度，需要对反射方向进行 Importance Sampling (如 GGX)
-            // 简单起见，这里先做完美反射：
-            next_dir = reflect(ray.Direction, N);
-            
-            // 镜面反射颜色通常是 base_color (对于金属)
-            throughput *= payload.albedo;
-            payload.cal_emission = true; // 下一次计算自发光
+        // --- Specular Bounce (GGX 采样) ---
+            H = SampleGGX(next_rand(seed), next_rand(seed), N, roughness);
+            L_bounce = reflect(-V, H); // 注意 V 是指向相机的，refelct 需要 incident
         }
         else
         {
-            // --- Diffuse (漫反射) ---
-            // 使用余弦加权采样
-            next_dir = GetCosineWeightedSample(N, seed);
-            
-            // Lambertian BRDF: Albedo / PI
-            // PDF: cos(theta) / PI
-            // Lighting equation term: cos(theta)
-            // Throughput update = (Albedo / PI) * cos(theta) / (cos(theta) / PI) = Albedo
-            throughput *= payload.albedo;
-            payload.cal_emission = false; // 下一次不计算自发光
+        // --- Diffuse Bounce (Cosine Weighted) ---
+            L_bounce = GetCosineWeightedSample(N, seed);
         }
-        
+        // 更新 Throughput
+        // Throughput *= BRDF * cos(theta) / PDF
+        float brdf_pdf = EvalBrdfPDF(N, V, L_bounce, payload.albedo, payload.roughness, payload.metallic);
+        float3 brdf = EvalPBR(N, V, L_bounce, payload.albedo, payload.roughness, payload.metallic);
+        if (brdf_pdf > 0.0001)
+        {
+            throughput *= brdf * max(dot(N, L_bounce), 0) / brdf_pdf;
+            next_dir = normalize(L_bounce);
+            //payload.cal_emission = (r_type < spec_chance); // 只有 Specular 反射通常才看作能看到光源本体（取决于具体需求，通常都设为 true 也可以）
+        }
+        else
+        {
+            break; // 采样失败或能量为0
+        }
+        last_brdf_pdf = brdf_pdf;
+        last_hit_pos = P;
 
         // --- 俄罗斯轮盘赌 (Russian Roulette) ---
         // 随着反弹次数增加，throughput 会变小。如果太小，就随机终止，避免浪费计算。
@@ -209,28 +256,6 @@
         ray.Direction = next_dir;
     }
     
-    
-    
-    /*
-    TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
-
-    // uint2 pixel_coords = DispatchRaysIndex().xy;
-  
-    // Write to immediate output (for camera movement mode)
-    output[pixel_coords] = float4(payload.color, 1);
-  
-  
-    // Accumulate color for progressive rendering (when camera is stationary)
-    float4 prev_color = accumulated_color[pixel_coords];
-    int prev_samples = accumulated_samples[pixel_coords];
-  
-    accumulated_color[pixel_coords] = prev_color + float4(payload.color, 1);
-    accumulated_samples[pixel_coords] = prev_samples + 1;
-    */
-    
-    
-    // Write entity ID to the ID buffer
-    // If no hit, write -1; otherwise write the instance ID
     
     // 如果没有 NaN (安全检查)
     if (any(isnan(radiance)))
