@@ -10,22 +10,20 @@ public:
     // Build a Cornell Box scene (classic ray tracing test scene)
     static void BuildCornellBox(Scene* scene);
     
-    // Build a simple test scene with a few primitives
-    static void BuildTestScene(Scene* scene);
+    // Build a second Cornell Box with circular disk light, metal and glass spheres
+    static void BuildCornellBox2(Scene* scene);
+    
+    // Build a glass material test scene
+    static void BuildGlassTestScene(Scene* scene);
+    
+    // Build Cornell Box with mesh model and glass sphere
+    static void BuildCornellBoxMesh(Scene* scene);
     
     // Build the default demo scene
     static void BuildDefaultScene(Scene* scene);
     
     // Build a scene showcasing different materials
     static void BuildMaterialShowcase(Scene* scene);
-    
-    // Build an empty scene (just a ground plane)
-    static void BuildEmptyScene(Scene* scene);
-    
-    // ===== Add your custom scenes below =====
-    
-    // Example: Build your custom scene
-    static void BuildMyCustomScene(Scene* scene);
     
 private:
     // Helper functions for common scene elements

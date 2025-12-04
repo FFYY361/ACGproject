@@ -27,7 +27,9 @@ struct Material
     float3 base_color;
     float roughness;
     float metallic;
+    float transmission;  // 0 = opaque, 1 = fully transparent
     float3 emission; // 后面做光源时会用到
+    float ior;           // Index of refraction
 };
 
 struct EntityInfo
@@ -58,7 +60,9 @@ struct RayPayload
     float3 albedo; // 材质颜色
     float roughness; // 粗糙度
     float metallic; // 金属度
+    float transmission; // 透射度
     float3 emission; // 自发光 (可选，如果材质有发光)
+    float ior; // 折射率
 };
 
 struct Light

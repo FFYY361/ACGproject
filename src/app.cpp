@@ -389,8 +389,8 @@ void Application::OnUpdate() {
         // Process pending scene switch BEFORE any rendering
         if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
             const char* scene_names[] = {
-                "Default Scene", "Cornell Box", "Test Scene",
-                "Material Showcase", "Empty Scene", "My Custom Scene"
+                "Default Scene", "Cornell Box", "Cornell Box 2", "Glass Test",
+                "Material Showcase"
             };
             
             grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
@@ -401,10 +401,9 @@ void Application::OnUpdate() {
             switch (pending_scene_index_) {
                 case 0: SceneBuilder::BuildDefaultScene(scene_.get()); break;
                 case 1: SceneBuilder::BuildCornellBox(scene_.get()); break;
-                case 2: SceneBuilder::BuildTestScene(scene_.get()); break;
-                case 3: SceneBuilder::BuildMaterialShowcase(scene_.get()); break;
-                case 4: SceneBuilder::BuildEmptyScene(scene_.get()); break;
-                case 5: SceneBuilder::BuildMyCustomScene(scene_.get()); break;
+                case 2: SceneBuilder::BuildCornellBox2(scene_.get()); break;
+                case 3: SceneBuilder::BuildGlassTestScene(scene_.get()); break;
+                case 4: SceneBuilder::BuildMaterialShowcase(scene_.get()); break;
             }
             
             // Wait for scene rebuild to complete
@@ -813,10 +812,9 @@ void Application::RenderSceneSelector() {
     const char* scene_names[] = {
         "Default Scene",
         "Cornell Box",
-        "Test Scene",
-        "Material Showcase",
-        "Empty Scene",
-        "My Custom Scene"
+        "Cornell Box 2",
+        "Glass Test",
+        "Material Showcase"
     };
     
     ImGui::Text("Select Scene:");

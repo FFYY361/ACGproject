@@ -87,8 +87,8 @@ void GetLightInfo(
     payload.cal_emission = true;
     
     // === 路径追踪主循环 ===
-    // 限制最大反弹次数，例如 3 或 5
-    for (int bounce = 0; bounce < 2; bounce++)
+    // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
+    for (int bounce = 0; bounce < 8; bounce++)
     {
         payload.hit = false;
         
@@ -130,12 +130,22 @@ void GetLightInfo(
             {
             }*/
             GetLightInfo(light, last_hit_pos, payload.position, L_intensity, light_pdf_solid, L_dir, dist);
-            if (last_brdf_pdf < 0)
-                mis_indirect = 1.0f;
+            
+            // 对于透射材质（last_brdf_pdf == 1.0），直接累加emission不需要MIS
+            if (last_brdf_pdf == 1.0)
+            {
+                radiance += throughput * payload.emission;
+            }
             else
-                mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
-        
-            radiance += throughput * payload.emission * mis_indirect;
+            {
+                // 标准BRDF路径需要MIS权重
+                if (last_brdf_pdf < 0)
+                    mis_indirect = 1.0f;
+                else
+                    mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
+            
+                radiance += throughput * payload.emission * mis_indirect;
+            }
             //radiance = float3(0, 0, 0); // 遇到自发光直接结束
             break;
         }
@@ -143,8 +153,8 @@ void GetLightInfo(
         
         float3 directLightContrib = float3(0, 0, 0);
         
-        
-        // 遍历光源 (这里为了演示只写一个循环，实际可能只随机采一个)
+        // 透射材质也需要直接光照（用于表面反射部分）
+        // 遍历光源进行Next Event Estimation
         for (int i = 0; i < lightinfo.num_light; ++i)
         {
             Light light = lights[i];
@@ -154,7 +164,7 @@ void GetLightInfo(
             float light_pdf_solid = 1.0;
             
             // --- 3.1 计算光源信息 ---
-            float3 light_pos = light.position; // 对于面光源，这里应该是采样位置
+            float3 light_pos = light.position;
             if (light.type == 1)
             {
                 // 面光源，随机采样光源表面位置
@@ -166,79 +176,60 @@ void GetLightInfo(
 
             // --- 3.2 阴影射线 (Shadow Ray) ---
             RayDesc shadowRay;
-            shadowRay.Origin = P + N * 0.001; // Bias
+            shadowRay.Origin = P + N * 0.001;
             shadowRay.Direction = L_dir;
             shadowRay.TMin = 0.001;
-            shadowRay.TMax = dist - 0.1; // 防止打到光源自己
+            shadowRay.TMax = dist - 0.1;
             RayPayload shadowPayload;
-            shadowPayload.hit = true; // 默认被遮挡
+            shadowPayload.hit = true;
             TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-                 0xFF, 0, 1, 0, shadowRay, shadowPayload); // Miss shader index 设为 0 (通用) 或 1 (专用)
+                 0xFF, 0, 1, 0, shadowRay, shadowPayload);
             
             if (!shadowPayload.hit)
             {
-                // --- 3.3 计算 BRDF 贡献 ---
+                // --- 3.3 计算 BSDF 贡献 ---
                 float NdotL = max(dot(N, L_dir), 0.0);
-                float3 brdf = EvalPBR(N, V, L_dir, payload.albedo, payload.roughness, payload.metallic);
+                float bsdf_pdf;
+                float3 bsdf = EvalBSDF(N, V, L_dir, payload.albedo, payload.roughness, 
+                                      payload.metallic, payload.transmission, payload.ior, bsdf_pdf);
                 float mis_direct = 1.0;
                 
-                float bsdf_pdf = EvalBrdfPDF(N, V, L_dir, payload.albedo, payload.roughness, payload.metallic);
-                //if (light.type != 0)
-                mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
+                if (bsdf_pdf > 0.0001)
+                    mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
                 
-                directLightContrib += mis_direct * throughput * brdf * L_intensity * NdotL / light_pdf_solid;
+                directLightContrib += mis_direct * throughput * bsdf * L_intensity * NdotL / light_pdf_solid;
             }
-
         }
         radiance += directLightContrib;
         
+        // === 使用统一的BSDF采样 ===
+        BSDFSample bsdf_sample = SampleBSDF(N, V, payload.albedo, payload.roughness, 
+                                            payload.metallic, payload.transmission, 
+                                            payload.ior, seed);
         
-        
-        
-        float3 next_dir = float3(0.0f, 0.0f, 0.0f);
-        // === 材质逻辑 (BRDF) ===
-        float probability_specular = payload.metallic; // 简单的混合概率
-        // 如果想更物理，应该使用 Fresnel 计算 specular 概率
-        
-        
-        float3 albedo = payload.albedo;
-        float roughness = payload.roughness;
-        float metallic = payload.metallic;
-       
-        
-        
-        float spec_chance = GetSpecularChance(N, V, albedo, roughness, metallic);
-    
-        float3 H, L_bounce;
-        
-        
-        
-        if (next_rand(seed) < spec_chance)
-        {
-        // --- Specular Bounce (GGX 采样) ---
-            H = SampleGGX(next_rand(seed), next_rand(seed), N, roughness);
-            L_bounce = reflect(-V, H); // 注意 V 是指向相机的，refelct 需要 incident
-        }
-        else
-        {
-        // --- Diffuse Bounce (Cosine Weighted) ---
-            L_bounce = GetCosineWeightedSample(N, seed);
-        }
-        // 更新 Throughput
-        // Throughput *= BRDF * cos(theta) / PDF
-        float brdf_pdf = EvalBrdfPDF(N, V, L_bounce, payload.albedo, payload.roughness, payload.metallic);
-        float3 brdf = EvalPBR(N, V, L_bounce, payload.albedo, payload.roughness, payload.metallic);
-        if (brdf_pdf > 0.0001)
-        {
-            throughput *= brdf * max(dot(N, L_bounce), 0) / brdf_pdf;
-            next_dir = normalize(L_bounce);
-            //payload.cal_emission = (r_type < spec_chance); // 只有 Specular 反射通常才看作能看到光源本体（取决于具体需求，通常都设为 true 也可以）
-        }
-        else
+        // 检查采样是否有效
+        if (bsdf_sample.pdf < 0.0001 || length(bsdf_sample.weight) < 0.0001)
         {
             break; // 采样失败或能量为0
         }
-        last_brdf_pdf = brdf_pdf;
+        
+        // 更新throughput
+        throughput *= bsdf_sample.weight;
+        
+        // 更新光线
+        float3 next_dir = normalize(bsdf_sample.direction);
+        ray.Origin = P + next_dir * 0.001; // 沿着新方向偏移
+        ray.Direction = next_dir;
+        
+        // 保存PDF用于MIS
+        if (bsdf_sample.isTransmission)
+        {
+            last_brdf_pdf = 1.0; // 透射使用特殊标记
+        }
+        else
+        {
+            last_brdf_pdf = bsdf_sample.pdf;
+        }
         last_hit_pos = P;
 
         // --- 俄罗斯轮盘赌 (Russian Roulette) ---
@@ -250,11 +241,7 @@ void GetLightInfo(
                 break; // 终止
             throughput /= p; // 能量补偿
         }
-
-        // --- 更新光线 ---
-        ray.Origin = payload.position + N * 0.001; // 偏移起点防止自遮挡 (Shadow Acne)
-        ray.Direction = next_dir;
-    }
+    } // 路径追踪主循环结束
     
     
     // 如果没有 NaN (安全检查)
@@ -364,7 +351,8 @@ void GetLightInfo(
     payload.albedo = mat.base_color;
     payload.roughness = mat.roughness;
     payload.metallic = mat.metallic;
-    //payload.emission = float3(0, 0, 0); // 暂时设为0，除非你的材质结构体里有 emission
-    if (payload.cal_emission)
-        payload.emission = mat.emission;
+    payload.transmission = mat.transmission;
+    payload.ior = mat.ior;
+    // 始终传递自发光，无论光线来自何处
+    payload.emission = mat.emission;
 }
