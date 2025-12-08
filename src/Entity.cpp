@@ -14,6 +14,7 @@ Entity::~Entity() {
     blas_.reset();
     index_buffer_.reset();
     vertex_buffer_.reset();
+    uv_buffer_.reset();
 }
 
 bool Entity::LoadMesh(const std::string& obj_file_path) {
@@ -52,6 +53,25 @@ void Entity::BuildBLAS(grassland::graphics::Core* core) {
                       grassland::graphics::BUFFER_TYPE_DYNAMIC, 
                       &index_buffer_);
     index_buffer_->UploadData(mesh_.Indices(), index_buffer_size);
+
+    // Create UV buffer (if mesh has UVs)
+    if (mesh_.TexCoords() && mesh_.NumVertices() > 0) {
+        size_t uv_buffer_size = mesh_.NumVertices() * sizeof(glm::vec2);
+        core->CreateBuffer(uv_buffer_size, 
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC, 
+                          &uv_buffer_);
+        uv_buffer_->UploadData(mesh_.TexCoords(), uv_buffer_size);
+        grassland::LogInfo("Created UV buffer with {} coordinates", mesh_.NumVertices());
+    } else {
+        // Create default UV buffer (all zeros)
+        std::vector<glm::vec2> default_uvs(mesh_.NumVertices(), glm::vec2(0.0f, 0.0f));
+        size_t uv_buffer_size = default_uvs.size() * sizeof(glm::vec2);
+        core->CreateBuffer(uv_buffer_size, 
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC, 
+                          &uv_buffer_);
+        uv_buffer_->UploadData(default_uvs.data(), uv_buffer_size);
+        grassland::LogInfo("Created default UV buffer (no UVs in mesh)");
+    }
 
     // Build BLAS
     core->CreateBottomLevelAccelerationStructure(

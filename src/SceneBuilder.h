@@ -19,6 +19,18 @@ public:
     // Build Cornell Box with mesh model and glass sphere
     static void BuildCornellBoxMesh(Scene* scene);
     
+    // Build Cornell Box 3 with flat walls, prism and cube
+    static void BuildCornellBox3(Scene* scene);
+    
+    // Build Cornell Box 4 with mirror sphere and transparent cube
+    static void BuildCornellBox4(Scene* scene);
+    
+    // Build a procedural scene (no textures needed)
+    static void BuildProceduralScene(Scene* scene);
+    
+    // Build bedroom scene using bedroom mesh
+    static void BuildBedroomScene(Scene* scene);
+    
     // Build the default demo scene
     static void BuildDefaultScene(Scene* scene);
     

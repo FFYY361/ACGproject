@@ -345,10 +345,20 @@ void GetLightInfo(
     // 计算击中点的世界坐标 (用于下一条光线的起点)
     float3 world_pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
     
+    // 插值UV坐标
+    float2 uv = b.x * v0.uv + b.y * v1.uv + b.z * v2.uv;
+    
     // === 将数据写入 Payload ===
     payload.position = world_pos;
     payload.normal = world_normal; // 确保法线归一化
-    payload.albedo = mat.base_color;
+    
+    // 如果有纹理，使用纹理颜色；否则使用材质基础色
+    if (mat.texture_id >= 0) {
+        payload.albedo = textures[NonUniformResourceIndex(mat.texture_id)].SampleLevel(textureSampler, uv, 0).rgb;
+    } else {
+        payload.albedo = mat.base_color;
+    }
+    
     payload.roughness = mat.roughness;
     payload.metallic = mat.metallic;
     payload.transmission = mat.transmission;

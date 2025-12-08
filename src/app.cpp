@@ -304,6 +304,8 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space10 - indices
 	program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space11 - lightinfo
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space12 - lights
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_SAMPLER, 1);                // space14 - texture sampler
     program_->Finalize();
 }
 
@@ -390,7 +392,7 @@ void Application::OnUpdate() {
         if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
             const char* scene_names[] = {
                 "Default Scene", "Cornell Box", "Cornell Box 2", "Glass Test",
-                "Material Showcase"
+                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene"
             };
             
             grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
@@ -404,6 +406,10 @@ void Application::OnUpdate() {
                 case 2: SceneBuilder::BuildCornellBox2(scene_.get()); break;
                 case 3: SceneBuilder::BuildGlassTestScene(scene_.get()); break;
                 case 4: SceneBuilder::BuildMaterialShowcase(scene_.get()); break;
+                case 5: SceneBuilder::BuildCornellBox3(scene_.get()); break;
+                case 6: SceneBuilder::BuildCornellBox4(scene_.get()); break;
+                case 7: SceneBuilder::BuildProceduralScene(scene_.get()); break;
+                case 8: SceneBuilder::BuildBedroomScene(scene_.get()); break;
             }
             
             // Wait for scene rebuild to complete
@@ -814,7 +820,11 @@ void Application::RenderSceneSelector() {
         "Cornell Box",
         "Cornell Box 2",
         "Glass Test",
-        "Material Showcase"
+        "Material Showcase",
+        "Cornell Box 3",
+        "Cornell Box 4",
+        "Procedural Scene",
+        "Bedroom Scene"
     };
     
     ImGui::Text("Select Scene:");
@@ -860,6 +870,15 @@ void Application::OnRender() {
     command_context->CmdBindResources(10,{ scene_->GetIndicesBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(11,{ scene_->GetLightInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(12,{ scene_->GetLightsBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	
+	// Bind textures (space13 for texture array, space14 for sampler)
+	// Note: Scene ensures at least one dummy texture exists
+	std::vector<grassland::graphics::Image*> texture_images;
+	for (size_t i = 0; i < scene_->GetTextureCount(); ++i) {
+	    texture_images.push_back(scene_->GetTexture(i));
+	}
+	command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(14, { scene_->GetTextureSampler() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
     command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);
     

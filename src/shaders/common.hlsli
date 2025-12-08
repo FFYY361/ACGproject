@@ -30,6 +30,7 @@ struct Material
     float transmission;  // 0 = opaque, 1 = fully transparent
     float3 emission; // 后面做光源时会用到
     float ior;           // Index of refraction
+    int texture_id;      // -1 = no texture, >= 0 = texture array index
 };
 
 struct EntityInfo
@@ -45,6 +46,7 @@ struct Vertex
 {
     float3 pos;
     float3 normal;
+    float2 uv;  // Texture coordinates
 };
 
 // 重构后的 RayPayload (如上一条建议所述)
@@ -92,5 +94,7 @@ StructuredBuffer<Vertex> vertices : register(t0, space9);
 StructuredBuffer<uint> indices : register(t0, space10);
 ConstantBuffer<LightInfo> lightinfo : register(b0, space11);
 StructuredBuffer<Light> lights : register(t0, space12);
+Texture2D textures[] : register(t0, space13);  // Bindless texture array
+SamplerState textureSampler : register(s0, space14);
 
 #endif

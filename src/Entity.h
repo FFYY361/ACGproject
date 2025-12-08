@@ -17,6 +17,7 @@ public:
     // Getters
     grassland::graphics::Buffer* GetVertexBuffer() const { return vertex_buffer_.get(); }
     grassland::graphics::Buffer* GetIndexBuffer() const { return index_buffer_.get(); }
+    grassland::graphics::Buffer* GetUVBuffer() const { return uv_buffer_.get(); }
     const Material& GetMaterial() const { return material_; }
     const glm::mat4& GetTransform() const { return transform_; }
     grassland::graphics::AccelerationStructure* GetBLAS() const { return blas_.get(); }
@@ -40,6 +41,7 @@ private:
 
     std::unique_ptr<grassland::graphics::Buffer> vertex_buffer_;
     std::unique_ptr<grassland::graphics::Buffer> index_buffer_;
+    std::unique_ptr<grassland::graphics::Buffer> uv_buffer_;
     std::unique_ptr<grassland::graphics::AccelerationStructure> blas_;
 
     bool mesh_loaded_;

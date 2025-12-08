@@ -16,6 +16,7 @@ struct EntityInfo {
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
+    glm::vec2 uv;
 };
 
 struct Light
@@ -94,6 +95,19 @@ private:
     std::unique_ptr<grassland::graphics::Buffer> entity_info_buffer_;
 	std::unique_ptr<grassland::graphics::Buffer> light_info_buffer_;
 	std::unique_ptr<grassland::graphics::Buffer> lights_buffer_;
+    
+    // Texture management
+    std::vector<std::unique_ptr<grassland::graphics::Image>> textures_;
+    std::unique_ptr<grassland::graphics::Sampler> texture_sampler_;
 
+public:
+    // Texture management
+    int AddTexture(const std::string& file_path);
+    int CreateProceduralTexture(int width, int height, const std::function<glm::vec4(float, float)>& generator);
+    grassland::graphics::Image* GetTexture(int index) const;
+    size_t GetTextureCount() const { return textures_.size(); }
+    grassland::graphics::Sampler* GetTextureSampler() const { return texture_sampler_.get(); }
+
+private:
 };
 

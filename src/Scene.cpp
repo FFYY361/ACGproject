@@ -1,6 +1,11 @@
 ﻿#include "Scene.h"
 #include "glm/gtc/matrix_transform.hpp"
 
+#include "stb_image_write.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 Scene::Scene(grassland::graphics::Core* core)
     : core_(core) {
 }
@@ -213,7 +218,13 @@ void Scene::UpdateBuffers() {
             vert.pos = glm::vec3(pos[0], pos[1], pos[2]);
             grassland::Vector3<float> norm = mesh.Normals() ? mesh.Normals()[v] : grassland::Vector3<float>{ 0.0f, 0.0f, 0.0f };
             vert.normal = glm::vec3(norm[0], norm[1], norm[2]);
-            //vert.normal = mesh.Normals() ? mesh.Normals()[v] : glm::vec3(0.0f, 0.0f, 0.0f);
+            // Add UV coordinates
+            if (mesh.TexCoords()) {
+                grassland::Vector2<float> uv = mesh.TexCoords()[v];
+                vert.uv = glm::vec2(uv[0], uv[1]);
+            } else {
+                vert.uv = glm::vec2(0.0f, 0.0f);
+            }
             vertices.push_back(vert);
         }
         // Append index data (with offset)
@@ -318,5 +329,100 @@ void Scene::UpdateBuffers() {
 	}
 	light_info_buffer_->UploadData(&light_info_, light_info_buffer_size);
 	grassland::LogInfo("The type of first light: {}", lights_[0].type);
+    
+    // Create texture sampler if not exists
+    if (!texture_sampler_) {
+        grassland::graphics::SamplerInfo sampler_info{};
+        // Use default sampler settings (linear filtering, repeat wrapping)
+        core_->CreateSampler(sampler_info, &texture_sampler_);
+        grassland::LogInfo("Created texture sampler");
+    }
+    
+    // Ensure at least one texture exists (required for shader binding)
+    if (textures_.empty()) {
+        grassland::LogInfo("No textures in scene, creating dummy 1x1 white texture");
+        CreateProceduralTexture(1, 1, [](float, float) { 
+            return glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); 
+        });
+    }
+}
 
+int Scene::AddTexture(const std::string& file_path) {
+    // 使用stb_image加载图片
+    int width, height, channels;
+    unsigned char* data = stbi_load(file_path.c_str(), &width, &height, &channels, 4); // 强制RGBA 4通道
+    
+    if (!data) {
+        grassland::LogError("Failed to load texture: {}", file_path);
+        grassland::LogWarning("Creating checkerboard texture as fallback");
+        
+        // 加载失败，创建棋盘格纹理作为后备
+        auto checkerboard = [](float u, float v) -> glm::vec4 {
+            int checker_size = 8;
+            int x = static_cast<int>(u * checker_size);
+            int y = static_cast<int>(v * checker_size);
+            bool is_white = ((x + y) % 2) == 0;
+            float c = is_white ? 0.9f : 0.1f;
+            return glm::vec4(c, c, c, 1.0f);
+        };
+        return CreateProceduralTexture(256, 256, checkerboard);
+    }
+    
+    grassland::LogInfo("Loaded texture: {} ({}x{}, {} channels)", file_path, width, height, channels);
+    
+    // 创建GPU纹理
+    std::unique_ptr<grassland::graphics::Image> texture;
+    core_->CreateImage(width, height,
+                      grassland::graphics::IMAGE_FORMAT_R8G8B8A8_UNORM,
+                      &texture);
+    
+    // 上传图片数据到GPU
+    texture->UploadData(data);
+    
+    // 释放stb_image分配的CPU内存
+    stbi_image_free(data);
+    
+    // 添加到纹理列表
+    textures_.push_back(std::move(texture));
+    return static_cast<int>(textures_.size() - 1);
+}
+
+int Scene::CreateProceduralTexture(int width, int height, 
+                                   const std::function<glm::vec4(float, float)>& generator) {
+    std::vector<uint8_t> pixels(width * height * 4);
+    
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            float u = static_cast<float>(x) / width;
+            float v = static_cast<float>(y) / height;
+            
+            glm::vec4 color = generator(u, v);
+            int idx = (y * width + x) * 4;
+            pixels[idx + 0] = static_cast<uint8_t>(glm::clamp(color.r * 255.0f, 0.0f, 255.0f));
+            pixels[idx + 1] = static_cast<uint8_t>(glm::clamp(color.g * 255.0f, 0.0f, 255.0f));
+            pixels[idx + 2] = static_cast<uint8_t>(glm::clamp(color.b * 255.0f, 0.0f, 255.0f));
+            pixels[idx + 3] = static_cast<uint8_t>(glm::clamp(color.a * 255.0f, 0.0f, 255.0f));
+        }
+    }
+    
+    std::unique_ptr<grassland::graphics::Image> texture;
+    core_->CreateImage(width, height,
+                      grassland::graphics::IMAGE_FORMAT_R8G8B8A8_UNORM,
+                      &texture);
+    
+    // Upload pixel data to the image
+    texture->UploadData(pixels.data());
+    
+    int index = static_cast<int>(textures_.size());
+    textures_.push_back(std::move(texture));
+    
+    grassland::LogInfo("Created procedural texture (index {}, {}x{})", index, width, height);
+    return index;
+}
+
+grassland::graphics::Image* Scene::GetTexture(int index) const {
+    if (index < 0 || index >= static_cast<int>(textures_.size())) {
+        return nullptr;
+    }
+    return textures_[index].get();
 }
