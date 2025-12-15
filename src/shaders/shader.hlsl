@@ -109,7 +109,7 @@ void GetLightInfo(
         
         float3 P = payload.position;
         float3 N = payload.normal;
-        float3 V = -ray.Direction; // 视线方向
+        float3 V = -ray.Direction;
         
         // (可选) 累加自发光 emission
         // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
@@ -132,20 +132,14 @@ void GetLightInfo(
             GetLightInfo(light, last_hit_pos, payload.position, L_intensity, light_pdf_solid, L_dir, dist);
             
             // 对于透射材质（last_brdf_pdf == 1.0），直接累加emission不需要MIS
-            if (last_brdf_pdf == 1.0)
-            {
-                radiance += throughput * payload.emission;
-            }
-            else
-            {
                 // 标准BRDF路径需要MIS权重
-                if (last_brdf_pdf < 0)
-                    mis_indirect = 1.0f;
-                else
-                    mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
+            if (last_brdf_pdf < 0 || last_brdf_pdf == 1.0)
+                mis_indirect = 1.0f;
+            else
+                mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
             
-                radiance += throughput * payload.emission * mis_indirect;
-            }
+            radiance = 0;
+            radiance += throughput * payload.emission * mis_indirect;
             //radiance = float3(0, 0, 0); // 遇到自发光直接结束
             break;
         }
@@ -189,32 +183,48 @@ void GetLightInfo(
             {
                 // --- 3.3 计算 BSDF 贡献 ---
                 float NdotL = max(dot(N, L_dir), 0.0);
-                float bsdf_pdf;
-                float3 bsdf = EvalBSDF(N, V, L_dir, payload.albedo, payload.roughness, 
-                                      payload.metallic, payload.transmission, payload.ior, bsdf_pdf);
+                BSDFSample bsdf = CalcBSDF(N, V, L_dir, payload.albedo, payload.roughness, 
+                                      payload.metallic, payload.transmission, payload.ior, seed);
                 float mis_direct = 1.0;
                 
-                if (bsdf_pdf > 0.0001)
-                    mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
+                if (bsdf.pdf > 0.0001)
+                    mis_direct = PowerHeuristic(light_pdf_solid, bsdf.pdf);
                 
-                directLightContrib += mis_direct * throughput * bsdf * L_intensity * NdotL / light_pdf_solid;
+                directLightContrib += mis_direct * throughput * bsdf.bsdf * L_intensity * NdotL / light_pdf_solid;
+                //directLightContrib = bsdf.isTransmission ? float3(1.0, 0.0, 0.0) : float3(1.0, 1.0, 1.0);
+                //directLightContrib = bsdf.bsdf;
+
             }
         }
+        //if (bounce == 1)
+            //radiance += directLightContrib;
+        //break;
         radiance += directLightContrib;
+        //break;
         
         // === 使用统一的BSDF采样 ===
         BSDFSample bsdf_sample = SampleBSDF(N, V, payload.albedo, payload.roughness, 
                                             payload.metallic, payload.transmission, 
                                             payload.ior, seed);
         
+        /*
+        if (bounce == 1) {
+            radiance = bsdf_sample.bsdf;
+            break;
+        }
+        */
+        //radiance = bsdf_sample.bsdf; 
+        //break;
+        
         // 检查采样是否有效
-        if (bsdf_sample.pdf < 0.0001 || length(bsdf_sample.weight) < 0.0001)
+        if (bsdf_sample.pdf < 0.0001 || length(bsdf_sample.bsdf) < 0.0001)
         {
+            //radiance = float3(1, 0, 0);
             break; // 采样失败或能量为0
         }
         
         // 更新throughput
-        throughput *= bsdf_sample.weight;
+        throughput *= bsdf_sample.bsdf * abs(dot(N, bsdf_sample.direction)) / bsdf_sample.pdf;
         
         // 更新光线
         float3 next_dir = normalize(bsdf_sample.direction);
@@ -358,6 +368,7 @@ void GetLightInfo(
     } else {
         payload.albedo = mat.base_color;
     }
+    //payload.albedo = mat.base_color;
     
     payload.roughness = mat.roughness;
     payload.metallic = mat.metallic;

@@ -73,22 +73,33 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     scene->Clear();
 
     // Light source - a small emissive cube above the scene
-    auto light = std::make_shared<Light>(
+    //auto light1 = std::make_shared<Light>(
+    //    0,
+    //    glm::vec3(1.5f, 3.0f, 2.0f),
+    //    glm::vec3(50.0f, 50.0f, 50.0f)
+    //);
+    auto light1 = std::make_shared<Light>(
         0,
-        glm::vec3(0.0f, 2.0f, 1.0f),
+        glm::vec3(0.0f, 2.5f, -1.1f),
         glm::vec3(15.0f, 15.0f, 15.0f)
     );
-    scene->AddLight(light);
+    scene->AddLight(light1);
+    /*auto light2 = std::make_shared<Light>(
+        0,
+        glm::vec3(1.5f, 0.5f, -2.0f),
+        glm::vec3(20.0f, 20.0f, 20.0f)
+    );*/
+    //scene->AddLight(light2);
 
-    /*auto light = std::make_shared<Light>(
-        1,
-        glm::vec3(0.0f, 2.0f, 0.0f),
-        glm::vec3(15.0f, 15.0f, 15.0f),
-        glm::vec3(0.0f, 0.0f, -0.1f),
-        glm::vec3(0.1f, 0.0f, 0.0f),
-        0.1f
-    );
-    scene->AddLight(light);*/
+    //auto light = std::make_shared<Light>(
+    //    1,
+    //    glm::vec3(0.0f, 2.0f, 1.5f),
+    //    glm::vec3(15.0f, 15.0f, 15.0f),
+    //    glm::vec3(0.0f, 0.0f, -1.0f),
+    //    glm::vec3(1.0f, 0.0f, 0.0f),
+    //    1.0f
+    //);
+    //scene->AddLight(light);
 
 
     // Ground plane
@@ -96,23 +107,23 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     
     // Yellow sphere
     scene->AddEntity(CreateSphere(
-        glm::vec3(-2.0f, 0.5f, 0.0f),
+        glm::vec3(0.0f, 0.5f, -2.0f),
         0.5f,
         Material(glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, 0.0f)
     ));
-    
+
     // Metallic white sphere
     scene->AddEntity(CreateSphere(
-        glm::vec3(0.0f, 0.5f, 0.0f),
+        glm::vec3(2.0f, 0.5f, 0.0f),
         0.5f,
         Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.1f, 1.0f)
     ));
     
     // Blue cube
     scene->AddEntity(CreateCube(
-        glm::vec3(2.0f, 0.5f, 0.0f),
+        glm::vec3(0.0f, 0.5f, 0.0f),
         glm::vec3(1.0f, 1.0f, 1.0f),
-        Material(glm::vec3(0.0f, 0.0f, 1.0f), 1.0f, 0.0f, glm::vec3(0.0f), 1.0f, 1.5f)
+        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.5f, 0.0f, glm::vec3(0.0f), 0.8f, 1.1f)
     ));
 
     

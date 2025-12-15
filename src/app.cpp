@@ -304,7 +304,8 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space10 - indices
 	program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space11 - lightinfo
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space12 - lights
-    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
+    //program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, scene_->GetTextureCount());              // space13 - texture array (bind)
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_SAMPLER, 1);                // space14 - texture sampler
     program_->Finalize();
 }
@@ -877,7 +878,7 @@ void Application::OnRender() {
 	for (size_t i = 0; i < scene_->GetTextureCount(); ++i) {
 	    texture_images.push_back(scene_->GetTexture(i));
 	}
-	command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
+	//command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(14, { scene_->GetTextureSampler() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
     command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);

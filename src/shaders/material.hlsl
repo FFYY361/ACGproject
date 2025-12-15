@@ -88,8 +88,8 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 
 float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
-    float NdotV = max(dot(N, V), 0.0);
-    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = abs(dot(N, V));
+    float NdotL = abs(dot(N, L));
     float ggx1 = GeometrySchlickGGX(NdotV, roughness);
     float ggx2 = GeometrySchlickGGX(NdotL, roughness);
 
@@ -108,11 +108,33 @@ void GetKSandKD(float3 N, float3 V, float3 albedo, float roughness, float metall
     kD *= (1.0 - metallic); // 金属没有漫反射成分
 }
 
-float CastScaler(float3 x)
+float Luminance(float3 x)
 {
     return dot(float3(0.2126, 0.7152, 0.0722), x);
 }
 
+// 构建局部坐标系 (Orthonormal Basis)
+void BuildOrthonormalBasis(float3 N, out float3 T, out float3 B)
+{
+    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    T = normalize(cross(up, N));
+    B = cross(N, T);
+}
+
+// 采样余弦加权半球 (用于漫反射)
+float3 SampleCosineWeightedHemisphere(float u1, float u2, float3 N)
+{
+    float3 T, B;
+    BuildOrthonormalBasis(N, T, B);
+    float r = sqrt(u1);
+    float phi = 2.0 * PI * u2;
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+    float z = sqrt(max(0.0, 1.0 - u1));
+    return x * T + y * B + z * N;
+}
+
+/*
 float GetSpecularChance(float3 N, float3 V, float3 albedo, float roughness, float metallic)
 {
     float3 kS;
@@ -170,7 +192,7 @@ float EvalBrdfPDF(float3 N, float3 V, float3 L, float3 albedo, float roughness, 
     // 4. 混合 PDF
     return spec_chance * pdf_spec + (1.0 - spec_chance) * pdf_diff;
 }
-
+*/
 // 生成 GGX 重要性采样的半程向量 H
 float3 SampleGGX(float u1, float u2, float3 N, float roughness)
 {
@@ -215,10 +237,269 @@ struct BSDFSample
 {
     float3 direction;  // 出射方向
     float pdf;         // PDF
-    float3 weight;     // BSDF * cos(theta) / pdf
+    float3 bsdf;     // BSDF*cos/pdf
     bool isTransmission; // 是否是透射
 };
 
+float3 calcFresnel(float ior, float NdotV, float3 albedo, float metallic)
+{
+    // 1. 计算菲涅尔项作为镜面反射权重的参考
+    // 对于电介质，F0 = ((1-ior)/(1+ior))^2
+    float f0_dielectric = pow((1.0 - ior) / (1.0 + ior), 2.0);
+    // 金属的F0即为albedo，电介质根据metallic混合
+    float3 F0 = lerp(float3(f0_dielectric, f0_dielectric, f0_dielectric), albedo, metallic);
+    
+    // 计算近似的菲涅尔反射强度
+    float3 fresnelWeight = fresnelSchlick(NdotV, F0);
+    return fresnelWeight;
+}
+
+// 计算各Lobe的选择概率
+void GetLobeProbabilities(float3 V, float3 N, float3 albedo, float metallic,
+                          float transmission, float ior,
+                          out float pDiffuse, out float pSpec, out float pTrans)
+{
+    // 1. 计算菲涅尔项作为镜面反射权重的参考
+    // 对于电介质，F0 = ((1-ior)/(1+ior))^2
+    float fresnelWeight = Luminance(calcFresnel(ior, abs(dot(N, V)), albedo, metallic));
+    
+    // 2. 能量权重 (Energy Weights)
+    // 金属没有漫反射和透射
+    float wSpec = fresnelWeight;
+    float wTrans = (1.0 - metallic) * transmission * (1.0 - fresnelWeight);
+    float wDiff = (1.0 - metallic) * (1.0 - transmission) * (1.0 - fresnelWeight);
+    //wTrans = 0;
+    
+    // 稍微调整 specular 权重以保证金属完全反射
+    wSpec = lerp(wSpec, 1.0, metallic);
+
+    // 3. 归一化为概率 (PDF Sum = 1)
+    float sum = wSpec + wTrans + wDiff;
+    if (sum > 1e-6)
+    {
+        pSpec = wSpec / sum;
+        pTrans = wTrans / sum;
+        pDiffuse = wDiff / sum;
+    }
+    else
+    {
+        // 异常情况兜底 (如全黑)
+        pSpec = 1.0;
+        pTrans = 0.0;
+        pDiffuse = 0.0;
+    }
+}
+
+BSDFSample CalcBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness, float metallic,
+                    float transmission, float ior, inout uint seed)
+{
+    L = normalize(L);
+    BSDFSample result;
+    result.direction = L;
+    float NdotV = dot(N, V);
+    float NdotL = dot(N, L);
+    
+    
+    // 判断是反射还是透射
+    bool reflecting = (NdotV * NdotL) > 0.0;
+    result.isTransmission = !reflecting;
+
+    // 准备概率
+    float pDiff, pSpec, pTrans;
+    GetLobeProbabilities(V, N, albedo, metallic, transmission, ior, pDiff, pSpec, pTrans);
+    
+    // 准备微表面常用变量
+
+    // --- 1. 漫反射贡献 ---
+    float3 diffBSDF = float3(0.0, 0.0, 0.0);
+    float diffPDF = 0.0;
+    
+    float3 H;
+    float3 F;
+    float eta = (NdotV > 0.0) ? (1.0 / ior) : ior;
+    if (reflecting)
+    {
+        H = normalize(V + L);
+        F = calcFresnel(ior, max(dot(H, V), 0.0), albedo, metallic);
+    }
+    else
+    {
+        H = normalize(eta * V + L);
+        F = calcFresnel(ior, abs(dot(V, H)), albedo, metallic);
+    }
+    
+    
+    if (reflecting && pDiff > 0.0)
+    {
+        float3 H = normalize(V + L);
+        // Lambertian
+        diffBSDF = (1 - F) * albedo / PI;
+        diffPDF = abs(NdotL) / PI; // Cosine weighted PDF
+    }
+
+    // --- 2. 镜面反射贡献 (BRDF) ---
+    float3 specBSDF = float3(0.0, 0.0, 0.0);
+    float specPDF = 0.0;
+    if (reflecting && pSpec > 0.0)
+    {
+        float3 H = normalize(V + L);
+        float G = GeometrySmith(N, V, L, roughness);
+        float D = DistributionGGX(N, H, roughness);
+        
+        float3 F = calcFresnel(ior, max(dot(H, V), 0.0), albedo, metallic);
+        
+        // Cook-Torrance
+        float denom = 4.0 * abs(NdotV) * abs(NdotL) + 1e-5;
+        specBSDF = (D * G * F) / denom;
+        //specBSDF = D;
+        
+        // PDF conversion: PDF_H -> PDF_L
+        // PDF_L = D(H) * (N.H) / (4 * (V.H))
+        float HdotV = max(0.0, dot(H, V));
+        float NdotH = max(0.0, dot(N, H));
+        specPDF = D * NdotH / (4.0 * HdotV + 1e-5);
+    }
+
+    // --- 3. 镜面透射贡献 (BTDF) ---
+    float3 transBSDF = float3(0.0, 0.0, 0.0);
+    float transPDF = 0.0;
+    if (!reflecting && pTrans > 0.0)
+    {
+        // 处理折射率
+        if (dot(H, N) < 0.0)
+            H = -H; // 统一朝向
+        float NdotH = abs(dot(N, H));
+        float VdotH = abs(dot(V, H));
+        float LdotH = abs(dot(L, H));
+       
+
+        float D = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        
+        // F 计算 (透射部分用 1-F)
+        
+        float sqrtDenom = eta * dot(V, H) + dot(L, H);
+        float3 numer = (1.0 - F) * D * G * VdotH * LdotH;
+        float denom = (abs(NdotL) * abs(NdotV) + 1e-5) * (sqrtDenom * sqrtDenom + 1e-5);
+        transBSDF = albedo * numer / denom;
+
+        // PDF conversion for Refraction
+        // PDF_L = PDF_H * |jacobian|
+        // Jacobian = eta^2 * (L.H) / (V.H + eta * L.H)^2
+        float jacobian = (LdotH) / (sqrtDenom * sqrtDenom + 1e-5);
+        transPDF = (D * NdotH) * jacobian;
+    }
+
+    // --- 4. 混合结果 (MIS Weighting) ---
+    // 最终 BSDF = 概率加权的各成分之和？不对，BSDF是物理属性，直接相加
+    // 但是这里需要根据材质属性mask掉不该有的部分 (如金属没有漫反射)
+    // 下面的逻辑已经在 pDiff/pSpec/pTrans 的计算中隐含了能量守恒的思想，
+    // 但 Evaluate 函数应该返回完整的物理响应。
+    
+    // 正确的混合方式：
+    // Diffuse 仅存在于 (1-metallic)*(1-transmission)
+    // Specular 存在于所有人
+    // Trans 仅存在于 (1-metallic)*transmission
+    
+    // 重算遮罩权重用于BSDF合成 (不是采样概率)
+    float maskDiff = (1.0 - metallic) * (1.0 - transmission);
+    float maskTrans = (1.0 - metallic) * transmission;
+    // Specular不需要mask，因为F项和metallic参数已经处理了强度
+    
+    result.bsdf = diffBSDF * maskDiff + specBSDF + transBSDF * maskTrans;
+    //result.bsdf = L;
+    
+    // PDF 必须是所有可能策略 PDF 的加权和
+    result.pdf = pDiff * diffPDF + pSpec * specPDF + pTrans * transPDF;
+    
+    // 防止除零
+    if (result.pdf < 1e-6)
+        result.pdf = 0.0;
+
+    return result;
+}
+
+BSDFSample SampleBSDF(float3 N, float3 V, float3 albedo, float roughness, float metallic,
+                      float transmission, float ior, inout uint seed)
+{
+    float u1 = next_rand(seed);
+    float u2 = next_rand(seed);
+    float u_lobe = next_rand(seed); // 用于选择 Lobe 的随机数
+
+    // 1. 获取选择概率
+    float pDiff, pSpec, pTrans;
+    GetLobeProbabilities(V, N, albedo, metallic, transmission, ior, pDiff, pSpec, pTrans);
+    
+    float3 L = float3(0, 0, 1);
+    bool sampledTransmission = false;
+
+    // 2. 根据概率选择采样策略
+    if (u_lobe < pSpec)
+    {
+        // --- 采样 Specular BRDF ---
+        float3 H = SampleGGX(u1, u2, N, roughness);
+        L = reflect(-V, H);
+        sampledTransmission = false;
+    }
+    else if (u_lobe < pSpec + pTrans)
+    {
+        // --- 采样 Specular BTDF ---
+        float3 H = SampleGGX(u1, u2, N, roughness);
+        
+        float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : ior;
+        float3 refrDir;
+        // refract 函数：refract(I, N, eta). I是指向表面的，即 -V
+        // 需要自己处理全内反射 (TIR)
+        float w = dot(V, H);
+        float k = 1.0 - eta * eta * (1.0 - w * w);
+        if (k < 0.0)
+        {
+            // 全内反射：退化为反射
+            L = float3(0.0, 0.0, 0.0);
+            sampledTransmission = false;
+        }
+        else
+        {
+            float sign = (dot(N, V) > 0.0) ? 1.0 : -1.0;
+            L = (eta * w - sign * sqrt(k)) * H - eta * V;
+            sampledTransmission = true;
+        }
+        L = normalize(L);
+    }
+    else
+    {
+        // --- 采样 Diffuse ---
+        L = SampleCosineWeightedHemisphere(u1, u2, N);
+        sampledTransmission = false;
+    }
+
+    // 3. 这里的关键点：
+    // 虽然我们要么选了漫反射，要么选了镜面，
+    // 但返回的 PDF 和 BSDF 必须包含*所有*Lobe对该方向 L 的贡献 (MIS)。
+    // 比如：即使我在粗糙表面选了漫反射方向，高光波瓣也可能覆盖到这个方向。
+    
+    if (length(L) < 0.01)
+    {
+        BSDFSample result;
+        result.bsdf = float3(0, 0, 0);
+        result.pdf = 0.0;
+        return result;
+    }
+    BSDFSample result = CalcBSDF(N, V, L, albedo, roughness, metallic, transmission, ior, seed);
+    
+    // 修正透射标记
+    result.isTransmission = sampledTransmission;
+    
+    return result;
+}
+
+
+
+
+
+
+
+/*
 // 统一的BSDF采样函数
 BSDFSample SampleBSDF(float3 N, float3 V, float3 albedo, float roughness, float metallic, 
                       float transmission, float ior, inout uint seed)
@@ -320,7 +601,8 @@ BSDFSample SampleBSDF(float3 N, float3 V, float3 albedo, float roughness, float 
     
     return result;
 }
-
+*/
+/*
 // 评估BSDF：给定入射和出射方向，计算BSDF值和PDF
 float3 EvalBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness, 
                 float metallic, float transmission, float ior, out float pdf)
@@ -355,3 +637,4 @@ float3 EvalBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness,
     pdf = EvalBrdfPDF(N, V, L, albedo, roughness, metallic);
     return EvalPBR(N, V, L, albedo, roughness, metallic);
 }
+*/
