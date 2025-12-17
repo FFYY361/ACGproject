@@ -59,12 +59,8 @@ struct RayPayload
     // G-Buffer 数据 (将由 ClosestHit 填充)
     float3 position; // 世界坐标位置
     float3 normal; // 世界坐标法线
-    float3 albedo; // 材质颜色
-    float roughness; // 粗糙度
-    float metallic; // 金属度
-    float transmission; // 透射度
-    float3 emission; // 自发光 (可选，如果材质有发光)
-    float ior; // 折射率
+    Material material; // 击中点的材质信息
+    float3 debug;
 };
 
 struct Light
@@ -96,5 +92,14 @@ ConstantBuffer<LightInfo> lightinfo : register(b0, space11);
 StructuredBuffer<Light> lights : register(t0, space12);
 Texture2D textures[] : register(t0, space13);  // Bindless texture array
 SamplerState textureSampler : register(s0, space14);
+
+
+
+float PowerHeuristic(float pdf_f, float pdf_g)
+{
+    float f2 = pdf_f * pdf_f;
+    float g2 = pdf_g * pdf_g;
+    return f2 / (max(f2 + g2, 0.00001));
+}
 
 #endif

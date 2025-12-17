@@ -219,15 +219,6 @@ float3 SampleGGX(float u1, float u2, float3 N, float roughness)
 
 
 
-// MIS
-// [New Function] Power Heuristic
-// 用于平衡两个 PDF 的权重。beta 通常取 2 (即 pdf 的平方)
-float PowerHeuristic(float pdf_f, float pdf_g)
-{
-    float f2 = pdf_f * pdf_f;
-    float g2 = pdf_g * pdf_g;
-    return f2 / (max(f2 + g2, 0.00001));
-}
 
 // ========== BSDF Implementation ==========
 // BSDF = BRDF (reflection) + BTDF (transmission)
@@ -311,8 +302,6 @@ BSDFSample CalcBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness
     // 准备微表面常用变量
 
     // --- 1. 漫反射贡献 ---
-    float3 diffBSDF = float3(0.0, 0.0, 0.0);
-    float diffPDF = 0.0;
     
     float3 H;
     float3 F;
@@ -329,11 +318,13 @@ BSDFSample CalcBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness
     }
     
     
+    float3 diffBSDF = float3(0.0, 0.0, 0.0);
+    float diffPDF = 0.0;
     if (reflecting && pDiff > 0.0)
     {
         float3 H = normalize(V + L);
         // Lambertian
-        diffBSDF = (1 - F) * albedo / PI;
+        diffBSDF = albedo / PI;
         diffPDF = abs(NdotL) / PI; // Cosine weighted PDF
     }
 
@@ -389,27 +380,10 @@ BSDFSample CalcBSDF(float3 N, float3 V, float3 L, float3 albedo, float roughness
         float jacobian = (LdotH) / (sqrtDenom * sqrtDenom + 1e-5);
         transPDF = (D * NdotH) * jacobian;
     }
-
-    // --- 4. 混合结果 (MIS Weighting) ---
-    // 最终 BSDF = 概率加权的各成分之和？不对，BSDF是物理属性，直接相加
-    // 但是这里需要根据材质属性mask掉不该有的部分 (如金属没有漫反射)
-    // 下面的逻辑已经在 pDiff/pSpec/pTrans 的计算中隐含了能量守恒的思想，
-    // 但 Evaluate 函数应该返回完整的物理响应。
     
-    // 正确的混合方式：
-    // Diffuse 仅存在于 (1-metallic)*(1-transmission)
-    // Specular 存在于所有人
-    // Trans 仅存在于 (1-metallic)*transmission
     
-    // 重算遮罩权重用于BSDF合成 (不是采样概率)
-    float maskDiff = (1.0 - metallic) * (1.0 - transmission);
-    float maskTrans = (1.0 - metallic) * transmission;
-    // Specular不需要mask，因为F项和metallic参数已经处理了强度
-    
-    result.bsdf = diffBSDF * maskDiff + specBSDF + transBSDF * maskTrans;
-    //result.bsdf = L;
-    
-    // PDF 必须是所有可能策略 PDF 的加权和
+    result.bsdf = pDiff * diffBSDF + pSpec * specBSDF + pTrans * transBSDF;
+    //result.bsdf = diffBSDF + specBSDF + transBSDF;
     result.pdf = pDiff * diffPDF + pSpec * specPDF + pTrans * transPDF;
     
     // 防止除零
@@ -469,7 +443,8 @@ BSDFSample SampleBSDF(float3 N, float3 V, float3 albedo, float roughness, float 
     else
     {
         // --- 采样 Diffuse ---
-        L = SampleCosineWeightedHemisphere(u1, u2, N);
+        float3 N_eff = dot(N, V) < 0.0 ? -N : N; // 保证N朝向V所在半球)
+        L = SampleCosineWeightedHemisphere(u1, u2, N_eff);
         sampledTransmission = false;
     }
 
@@ -489,6 +464,7 @@ BSDFSample SampleBSDF(float3 N, float3 V, float3 albedo, float roughness, float 
     
     // 修正透射标记
     result.isTransmission = sampledTransmission;
+    //result.bsdf = L;
     
     return result;
 }

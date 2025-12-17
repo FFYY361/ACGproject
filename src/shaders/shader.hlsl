@@ -2,7 +2,7 @@
 // 1. 引入其他模块
 #include "common.hlsli"
 #include "random.hlsli"
-#include "material.hlsl"
+#include "bsdf.hlsl"
 
 void GetLightInfo(
     in Light light, in float3 P, in float3 light_pos,
@@ -88,7 +88,7 @@ void GetLightInfo(
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
-    for (int bounce = 0; bounce < 8; bounce++)
+    for (int bounce = 0; bounce < 20; bounce++)
     {
         payload.hit = false;
         
@@ -101,7 +101,8 @@ void GetLightInfo(
         // --- Case 1: Miss (击中天空/背景) ---
         if (!payload.hit)
         {
-            radiance += throughput * payload.albedo; // 如果 Miss Shader 里设置了 albedo
+            //radiance = 0.0;
+            radiance += throughput * payload.material.base_color; // 如果 Miss Shader 里设置了 albedo
             break; // 光线逃逸，结束路径
         }
 
@@ -113,7 +114,7 @@ void GetLightInfo(
         
         // (可选) 累加自发光 emission
         // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
-        if (length(payload.emission) > 0.01)
+        if (length(payload.material.emission) > 0.01)
         {
             // 我们需要计算 MIS 权重： w_b = p_b^2 / (p_b^2 + p_l^2)
             // p_b 是上一轮决定射向这里的 BSDF PDF (我们需要在上一轮循环结束前存下来)
@@ -138,8 +139,8 @@ void GetLightInfo(
             else
                 mis_indirect = PowerHeuristic(last_brdf_pdf, light_pdf_solid);
             
-            radiance = 0;
-            radiance += throughput * payload.emission * mis_indirect;
+            //radiance = 0;
+            radiance += throughput * payload.material.emission * mis_indirect;
             //radiance = float3(0, 0, 0); // 遇到自发光直接结束
             break;
         }
@@ -182,18 +183,18 @@ void GetLightInfo(
             if (!shadowPayload.hit)
             {
                 // --- 3.3 计算 BSDF 贡献 ---
-                float NdotL = max(dot(N, L_dir), 0.0);
-                BSDFSample bsdf = CalcBSDF(N, V, L_dir, payload.albedo, payload.roughness, 
-                                      payload.metallic, payload.transmission, payload.ior, seed);
+                float NdotL = abs(dot(N, L_dir));
+                BSDFSample bsdf = EvalBSDF(V, N, L_dir, payload.material);
                 float mis_direct = 1.0;
                 
                 if (bsdf.pdf > 0.0001)
                     mis_direct = PowerHeuristic(light_pdf_solid, bsdf.pdf);
                 
                 directLightContrib += mis_direct * throughput * bsdf.bsdf * L_intensity * NdotL / light_pdf_solid;
+                //directLightContrib = L_dir;
+                //directLightContrib = 1/bsdf.pdf;
                 //directLightContrib = bsdf.isTransmission ? float3(1.0, 0.0, 0.0) : float3(1.0, 1.0, 1.0);
                 //directLightContrib = bsdf.bsdf;
-
             }
         }
         //if (bounce == 1)
@@ -203,23 +204,28 @@ void GetLightInfo(
         //break;
         
         // === 使用统一的BSDF采样 ===
-        BSDFSample bsdf_sample = SampleBSDF(N, V, payload.albedo, payload.roughness, 
-                                            payload.metallic, payload.transmission, 
-                                            payload.ior, seed);
+        BSDFSample bsdf_sample;
+        bool success = SampleBSDF(V, N, payload.material, seed, bsdf_sample);
+        
         
         /*
-        if (bounce == 1) {
-            radiance = bsdf_sample.bsdf;
+        if (bounce == 2)
+        {
+            radiance = directLightContrib;
             break;
         }
         */
+        
+        
+        
+        
         //radiance = bsdf_sample.bsdf; 
         //break;
         
         // 检查采样是否有效
-        if (bsdf_sample.pdf < 0.0001 || length(bsdf_sample.bsdf) < 0.0001)
+        if (!success || bsdf_sample.pdf < 0.0001 || length(bsdf_sample.bsdf) < 0.0001)
         {
-            //radiance = float3(1, 0, 0);
+            
             break; // 采样失败或能量为0
         }
         
@@ -232,19 +238,18 @@ void GetLightInfo(
         ray.Direction = next_dir;
         
         // 保存PDF用于MIS
+        /*
         if (bsdf_sample.isTransmission)
         {
             last_brdf_pdf = 1.0; // 透射使用特殊标记
         }
-        else
-        {
-            last_brdf_pdf = bsdf_sample.pdf;
-        }
+        */
+        last_brdf_pdf = bsdf_sample.pdf;
         last_hit_pos = P;
 
         // --- 俄罗斯轮盘赌 (Russian Roulette) ---
         // 随着反弹次数增加，throughput 会变小。如果太小，就随机终止，避免浪费计算。
-        if (bounce > 2)
+        if (bounce > 10)
         {
             float p = max(throughput.x, max(throughput.y, throughput.z));
             if (next_rand(seed) > p)
@@ -281,10 +286,12 @@ void GetLightInfo(
     //  float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     //  payload.color = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
   
-    float3 topColor = float3(0.2, 0.2, 0.2);
+    float3 topColor = float3(0.1, 0.1, 0.1);
     float3 bottomColor = float3(0.1, 0.1, 0.1);
     float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
-    payload.albedo = lerp(topColor, bottomColor, t);
+    Material mat;
+    mat.base_color = lerp(bottomColor, topColor, t);
+    payload.material = mat;
   
   
     payload.hit = false;
@@ -322,6 +329,7 @@ void GetLightInfo(
     Vertex v1 = vertices[indices[entity_info.indexBufferOffset + prim * 3 + 1] + entity_info.vertexBufferOffset];
     Vertex v2 = vertices[indices[entity_info.indexBufferOffset + prim * 3 + 2] + entity_info.vertexBufferOffset];
     
+    /*
     if ((v0.normal.x == 0 && v0.normal.y == 0 && v0.normal.z == 0) ||
         (v1.normal.x == 0 && v1.normal.y == 0 && v1.normal.z == 0) ||
         (v2.normal.x == 0 && v2.normal.y == 0 && v2.normal.z == 0)) {
@@ -335,6 +343,12 @@ void GetLightInfo(
         float3 face_nromal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
         world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_nromal));
     }
+    */
+        // 如果顶点法线全为零，则使用面法线
+    float3 edge1 = v1.pos - v0.pos;
+    float3 edge2 = v2.pos - v0.pos;
+    float3 face_normal = cross(edge1, edge2);
+    world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
   
     /*
     // 2. 平行光方向 (0, 0, -1)
@@ -361,19 +375,11 @@ void GetLightInfo(
     // === 将数据写入 Payload ===
     payload.position = world_pos;
     payload.normal = world_normal; // 确保法线归一化
+    payload.debug = world_normal;
     
     // 如果有纹理，使用纹理颜色；否则使用材质基础色
     if (mat.texture_id >= 0) {
-        payload.albedo = textures[NonUniformResourceIndex(mat.texture_id)].SampleLevel(textureSampler, uv, 0).rgb;
-    } else {
-        payload.albedo = mat.base_color;
-    }
-    //payload.albedo = mat.base_color;
-    
-    payload.roughness = mat.roughness;
-    payload.metallic = mat.metallic;
-    payload.transmission = mat.transmission;
-    payload.ior = mat.ior;
-    // 始终传递自发光，无论光线来自何处
-    payload.emission = mat.emission;
+        mat.base_color = textures[NonUniformResourceIndex(mat.texture_id)].SampleLevel(textureSampler, uv, 0).rgb;
+    } 
+    payload.material = mat;
 }
