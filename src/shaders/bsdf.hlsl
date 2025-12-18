@@ -3,6 +3,20 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ===============================================================================================
 // 0. 结构体定义 (Required)
 // ===============================================================================================
@@ -345,7 +359,8 @@ bool SampleBSDF(
     float3 N,
     Material mat,
     inout uint seed,
-    out BSDFSample ret
+    out BSDFSample ret,
+    inout RayPayload payload
 )
 {
     // 参数预处理
@@ -377,6 +392,10 @@ bool SampleBSDF(
     if (randLobe < pDiff)
     {
         L = SampleCosineWeightedHemisphere(N, seed);
+        float k = 0.5; // 调整因子，根据需要调整
+        float theta = (PI / 2.0);
+        payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+
     }
     if (randLobe >= pDiff && randLobe < pDiff + pSpec)
     {
@@ -384,6 +403,10 @@ bool SampleBSDF(
         L = reflect(-V, H);
         if (IsSameHemisphere(L, V, N) == false)
             return false; // 无效采样
+        float k = 0; // 调整因子，根据需要调整
+        float theta = atan(2 * mat.roughness);
+        payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+
     }
     if (randLobe >= pDiff + pSpec)
     {
@@ -398,6 +421,11 @@ bool SampleBSDF(
                 return false; // 无效采样
         Debug = true;
         debugValue = L;
+        payload.angle *= eta;
+        
+        float k = 0; // 调整因子，根据需要调整
+        float theta = atan(2 * mat.roughness);
+        payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
         //L = dot(V, H);
         //ret = EvalBSDF(V, L, N, mat);
         //return true;

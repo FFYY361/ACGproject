@@ -50,6 +50,12 @@ struct Vertex
     float2 uv;  // Texture coordinates
 };
 
+struct TextureInfo
+{
+    int idx;
+    int mipLevels;
+};
+
 // 重构后的 RayPayload (如上一条建议所述)
 struct RayPayload
 {
@@ -62,6 +68,12 @@ struct RayPayload
     float3 normal; // 世界坐标法线
     Material material; // 击中点的材质信息
     float3 debug;
+    float angle; // 光锥角度
+    float width; // 光锥宽度
+    float3 dPdX;
+    float3 dPdY;
+    float3 dDdX;
+    float3 dDdY;
 };
 
 struct Light
@@ -93,6 +105,11 @@ ConstantBuffer<LightInfo> lightinfo : register(b0, space11);
 StructuredBuffer<Light> lights : register(t0, space12);
 Texture2D textures[] : register(t0, space13);  // Bindless texture array
 SamplerState textureSampler : register(s0, space14);
+StructuredBuffer<TextureInfo> texture_infos : register(t0, space15);
+
+
+
+Texture2D textures_real[];
 
 
 

@@ -4,9 +4,11 @@
 #include "random.hlsli"
 #include "bsdf.hlsl"
 
+
 void GetLightInfo(
     in Light light, in float3 P, in float3 light_pos,
-    out float3 intensity, out float pdf_solid, out float3 dir, out float dist)
+    out float3 intensity, out float pdf_solid, out float3 dir, out float dist
+)
 {
     if (light.type == 0)
     {
@@ -34,8 +36,33 @@ void GetLightInfo(
     }
 }
 
+float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 normal)
+{
+    int text_idx = texture_infos[idx].idx;
+    Texture2D texture = textures[NonUniformResourceIndex(texture_infos[idx].idx)];
+    uint twidth, theight, numlevel;
+    texture.GetDimensions(0, twidth, theight, numlevel);
+    uint resolution = max(twidth, theight);
+    float area_uv = 1.0; // 假设整个纹理覆盖面积为1
+    float area_pos = width * width; // 近似为正方形区域
+    float texel_size = sqrt(area_uv / area_pos);
+    float mip_level = log2(resolution * texel_size) - log2(abs(dot(ray_dir, normal)) + EPS);
+    mip_level = clamp(mip_level, 0.0, (float) (texture_infos[idx].mipLevels - 1));
+    text_idx += (int) mip_level;
+    texture = textures[NonUniformResourceIndex(texture_infos[idx].idx)];
+    return texture.SampleLevel(textureSampler, uv, 0).rgb;
+}
 
 
+float3 get_target_direction(float2 pixel_center)
+{
+    uint2 dims = float2(DispatchRaysDimensions().xy);
+    float2 uv = pixel_center / float2(dims);
+    uv.y = 1.0 - uv.y;
+    uv = uv * 2.0 - 1.0;
+    float4 target = mul(camera_info.screen_to_camera, float4(uv, 1, 1));
+    return target.xyz;
+}
 
 
 
@@ -90,7 +117,37 @@ void GetLightInfo(
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
     for (int bounce = 0; bounce < 3; bounce++)
     {
+        
         payload.hit = false;
+        
+        
+        
+        payload.dPdX = 0.0;
+        payload.dPdY = 0.0;
+        
+        
+        float3 d = target.xyz;
+        float3 x = float3(1, 0, 0);
+        float3 y = float3(0, 1, 0);
+        
+        float3 target_x = get_target_direction(pixel_center + float2(1.0, 0.0));
+        float3 target_y = get_target_direction(pixel_center + float2(0.0, 1.0));
+        float3 right = target_x - d;
+        float3 up = target_y - d;
+        payload.dDdX = (pow(length(d), 2) * right - (dot(d, right)) * right) / (pow(length(d), 3) + EPS);
+        payload.dDdY = (pow(length(d), 2) * up - (dot(d, up)) * up) / (pow(length(d), 3) + EPS);
+        
+        payload.dDdX = mul(camera_info.camera_to_world, float4(payload.dDdX, 0)).xyz;
+        payload.dDdY = mul(camera_info.camera_to_world, float4(payload.dDdY, 0)).xyz;
+        
+        float fovY = radians(60.0f);
+
+        
+        payload.angle = (2 * tan(fovY / 2.0f)) / dims.y; // 2 arctan(0.5/F)
+        payload.width = 0.0;
+        
+        float h, w;
+        uint n;
         
         // 发射光线
         TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
@@ -207,7 +264,11 @@ void GetLightInfo(
         
         // === 使用统一的BSDF采样 ===
         BSDFSample bsdf_sample;
-        bool success = SampleBSDF(V, N, payload.material, seed, bsdf_sample);
+        float angle = payload.angle;
+        float width = payload.width;
+        bool success = SampleBSDF(V, N, payload.material, seed, bsdf_sample, payload);
+        payload.angle = angle;
+        payload.width = width;
         
         
         
@@ -341,6 +402,22 @@ void GetLightInfo(
     
     // 插值UV坐标
     float2 uv = b.x * v0.uv + b.y * v1.uv + b.z * v2.uv;
+    // 光线微分
+    float sign = (dot(WorldRayDirection(), world_normal)) > 0 ? 1.0 : -1.0;
+    float3 dTdX = -(dot(world_normal, (payload.dPdX + RayTCurrent() * payload.dDdX))) / (dot(WorldRayDirection(), world_normal) + sign * EPS);
+    float3 dPdX = payload.dPdX + RayTCurrent() * payload.dDdX + dTdX * WorldRayDirection();
+    float3 dDdX = payload.dDdX;
+    
+    float3 dTdY = -(dot(world_normal, (payload.dPdY + RayTCurrent() * payload.dDdY))) / (dot(WorldRayDirection(), world_normal) + sign * EPS);
+    float3 dPdY = payload.dPdY + RayTCurrent() * payload.dDdY + dTdY * WorldRayDirection();
+    float3 dDdY = payload.dDdY;
+    
+    payload.dPdX = dPdX;
+    payload.dDdX = dDdX;
+    payload.dPdY = dPdY;
+    payload.dDdY = dDdY;
+    
+    payload.width = payload.width + tan(payload.angle) * RayTCurrent();
     
     /*
     if ((v0.normal.x == 0 && v0.normal.y == 0 && v0.normal.z == 0) ||
@@ -363,10 +440,14 @@ void GetLightInfo(
     world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
     */
     
+    float3 face_normal_ = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
+    float3 world_normal_ = normalize(mul((float3x3) entity_info.objectToWorld, face_normal_));
+    
+    
     float3 face_normal = float3(0, 0, 0);
     if (mat.material_id >= 0)
     {
-        float3 normal = textures[NonUniformResourceIndex(mat.material_id)].SampleLevel(textureSampler, uv, 0).rgb;
+        float3 normal = MipMapSample(mat.material_id, uv, payload.width, WorldRayDirection(), world_normal_);
         normal = normal * 2.0 - 1.0; // 从 [0,1] 映射到 [-1,1]
         //normal.y = -normal.y; // 纹理空间到对象空间的 Y 轴翻转
         face_normal = normalize(normal);
@@ -395,6 +476,9 @@ void GetLightInfo(
     */
     
     
+    
+    
+    
     // === 将数据写入 Payload ===
     payload.position = world_pos;
     payload.normal = world_normal; // 确保法线归一化
@@ -402,7 +486,7 @@ void GetLightInfo(
     
     // 如果有纹理，使用纹理颜色；否则使用材质基础色
     if (mat.texture_id >= 0) {
-        mat.base_color = textures[NonUniformResourceIndex(mat.texture_id)].SampleLevel(textureSampler, uv, 0).rgb;
+        mat.base_color = MipMapSample(mat.texture_id, uv, payload.width, WorldRayDirection(), world_normal);
     }
     payload.material = mat;
 }

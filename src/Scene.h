@@ -13,6 +13,12 @@ struct EntityInfo {
     uint32_t materialOffset;
 };
 
+struct TextureInfo {
+    int idx;
+	int mipLevels;
+    TextureInfo(int idx, int mipLevels) : idx(idx), mipLevels(mipLevels) {};
+};
+
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 normal;
@@ -73,6 +79,7 @@ public:
 	grassland::graphics::Buffer* GetEntityInfoBuffer() const { return entity_info_buffer_.get(); }
 	grassland::graphics::Buffer* GetLightsBuffer() const { return lights_buffer_.get(); }
 	grassland::graphics::Buffer* GetLightInfoBuffer() const { return light_info_buffer_.get(); }
+	grassland::graphics::Buffer* GetTextureInfoBuffer() const { return texture_info_buffer_.get(); }
 
     // Get all entities
     const std::vector<std::shared_ptr<Entity>>& GetEntities() const { return entities_; }
@@ -99,6 +106,9 @@ private:
     // Texture management
     std::vector<std::unique_ptr<grassland::graphics::Image>> textures_;
     std::unique_ptr<grassland::graphics::Sampler> texture_sampler_;
+    int num_texture_;
+    std::vector<TextureInfo> texture_infos_;
+    std::unique_ptr<grassland::graphics::Buffer> texture_info_buffer_;
 
 public:
     // Texture management

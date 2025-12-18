@@ -203,7 +203,7 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     ));
 
 	int idx_text = scene->AddTexture(PROJECT_DIR "/meshes/cube_normal.png");
-	//grassland::LogInfo("Added texture with index: {}", idx_text);
+    grassland::LogInfo("Added texture with index: {}", idx_text);
 
 
     // === 场景物体2：透明玻璃立方体（前方，旋转45度） ===

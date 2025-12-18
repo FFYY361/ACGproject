@@ -5,6 +5,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize2.h"
 
 Scene::Scene(grassland::graphics::Core* core)
     : core_(core) {
@@ -81,6 +83,7 @@ void Scene::Clear() {
 	entity_info_buffer_.reset();
 	light_info_buffer_.reset();
     lights_.clear();
+    num_texture_ = 0;
 	grassland::LogInfo("Cleared scene");
 }
 
@@ -235,31 +238,7 @@ void Scene::UpdateBuffers() {
         index_buffer_offset += num_indices;
     }
 
-    EntityInfo debug_info = entity_infos[0];/*
-    grassland::LogInfo("First entity info: vertexOffset={}, indexOffset={}, materialOffset={}, objectToWorld={}",
-        debug_info.vertexBufferOffset,
-        debug_info.indexBufferOffset,
-		debug_info.materialOffset);*/
-    grassland::LogInfo("objectToWorld matrix first row: [{}, {}, {}, {}]",
-        debug_info.objectToWorld[0][0],
-        debug_info.objectToWorld[0][1],
-        debug_info.objectToWorld[0][2],
-		debug_info.objectToWorld[0][3]);
-    grassland::LogInfo("objectToWorld matrix second row: [{}, {}, {}, {}]",
-        debug_info.objectToWorld[1][0],
-        debug_info.objectToWorld[1][1],
-        debug_info.objectToWorld[1][2],
-        debug_info.objectToWorld[1][3]);
-    grassland::LogInfo("objectToWorld matrix third row: [{}, {}, {}, {}]",
-        debug_info.objectToWorld[2][0],
-        debug_info.objectToWorld[2][1],
-        debug_info.objectToWorld[2][2],
-		debug_info.objectToWorld[2][3]);
-    grassland::LogInfo("objectToWorld matrix fourth row: [{}, {}, {}, {}]",
-        debug_info.objectToWorld[3][0],
-        debug_info.objectToWorld[3][1],
-		debug_info.objectToWorld[3][2],
-		debug_info.objectToWorld[3][3]);
+    EntityInfo debug_info = entity_infos[0];
 
 
 
@@ -303,6 +282,19 @@ void Scene::UpdateBuffers() {
     indices_buffer_->UploadData(indices.data(), indices_buffer_size);
 	grassland::LogInfo("Updated index buffer with {} indices, each of size {}", indices.size(), sizeof(uint32_t));
 
+	// Create/update texturesinfo buffer
+    if (texture_infos_.size() == 0) {
+		TextureInfo dummy_tex_info(0, 0);
+		texture_infos_.push_back(dummy_tex_info);
+    }
+	size_t texture_info_buffer_size = texture_infos_.size() * sizeof(TextureInfo);
+    if (!texture_info_buffer_) {
+        core_->CreateBuffer(texture_info_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &texture_info_buffer_);
+	}
+	texture_info_buffer_->UploadData(texture_infos_.data(), texture_info_buffer_size);
+	grassland::LogInfo("Updated texture info buffer with {} texture infos, each of size {}", texture_infos_.size(), sizeof(TextureInfo));
 
 
 	light_info_.num_light = static_cast<int>(lights_.size());
@@ -332,7 +324,14 @@ void Scene::UpdateBuffers() {
     
     // Create texture sampler if not exists
     if (!texture_sampler_) {
-        grassland::graphics::SamplerInfo sampler_info{};
+        grassland::graphics::SamplerInfo sampler_info(
+            grassland::graphics::FilterMode::FILTER_MODE_LINEAR,   // min_filter: 缩小使用线性插值
+            grassland::graphics::FilterMode::FILTER_MODE_LINEAR,   // mag_filter: 放大使用线性插值
+            grassland::graphics::FilterMode::FILTER_MODE_LINEAR,   // mip_filter: 核心设置！层级之间也进行线性插值
+            grassland::graphics::AddressMode::ADDRESS_MODE_REPEAT,  // address_u
+            grassland::graphics::AddressMode::ADDRESS_MODE_REPEAT,  // address_v
+            grassland::graphics::AddressMode::ADDRESS_MODE_REPEAT   // address_w
+        );
         // Use default sampler settings (linear filtering, repeat wrapping)
         core_->CreateSampler(sampler_info, &texture_sampler_);
         grassland::LogInfo("Created texture sampler");
@@ -353,6 +352,7 @@ int Scene::AddTexture(const std::string& file_path) {
     unsigned char* data = stbi_load(file_path.c_str(), &width, &height, &channels, 4); // 强制RGBA 4通道
     
     if (!data) {
+        return -1;
         grassland::LogError("Failed to load texture: {}", file_path);
         grassland::LogWarning("Creating checkerboard texture as fallback");
         
@@ -368,26 +368,61 @@ int Scene::AddTexture(const std::string& file_path) {
         return CreateProceduralTexture(256, 256, checkerboard);
     }
     
-    grassland::LogInfo("Loaded texture: {} ({}x{}, {} channels)", file_path, width, height, channels);
-    
-    // 创建GPU纹理
-    std::unique_ptr<grassland::graphics::Image> texture;
-    core_->CreateImage(width, height,
-                      grassland::graphics::IMAGE_FORMAT_R8G8B8A8_UNORM,
-                      &texture);
-    
-    // 上传图片数据到GPU
-    texture->UploadData(data);
+    grassland::LogInfo("Loaded image: {} ({}x{}, {} channels)", file_path, width, height, channels);
 
-    
-    // 释放stb_image分配的CPU内存
-    stbi_image_free(data);
 
-    // 添加到纹理列表
-    textures_.push_back(std::move(texture));
-    grassland::LogInfo("Added texture to scene (index {}, {}x{})", 
-		textures_.size() - 1, width, height);
-    return static_cast<int>(textures_.size() - 1);
+    int miplevels = static_cast<int>(std::floor(std::log2(std::max(width, height)))) + 1;
+    int curW = width;
+    int curH = height;
+    unsigned char* curData = data; // 当前操作的指针
+	TextureInfo tex_info(textures_.size(), miplevels);
+	texture_infos_.push_back(tex_info);
+
+    for (int level = 0; level < miplevels; ++level) {
+        // 1. 创建并上传 GPU 纹理
+        std::unique_ptr<grassland::graphics::Image> texture;
+        core_->CreateImage(curW, curH, grassland::graphics::IMAGE_FORMAT_R8G8B8A8_UNORM, &texture);
+        texture->UploadData(curData);
+        textures_.push_back(std::move(texture));
+
+        // 如果是最后一层，不需要再计算下一层
+        if (level == miplevels - 1) break;
+
+        // 2. 准备下一层数据
+        int nextW = std::max(1, curW / 2);
+        int nextH = std::max(1, curH / 2);
+        unsigned char* nextData = (unsigned char*)malloc(nextW * nextH * 4);
+
+        stbir_resize_uint8_linear(curData, curW, curH, 0,
+            nextData, nextW, nextH, 0, STBIR_RGBA);
+
+        // 3. 关键：释放当前层的 CPU 内存（如果是第一层用 stbi，否则用 free）
+        if (level == 0) {
+            stbi_image_free(curData);
+        }
+        else {
+            free(curData);
+        }
+
+        // 4. 迭代
+        curData = nextData;
+        curW = nextW;
+        curH = nextH;
+    }
+
+    // 循环结束后，curData 指向的是最后一层 Mipmap 的内存，需释放
+    // 注意：如果 miplevels 为 1，则此处 curData 就是 data，已在上面 stbi_image_free 过了
+    if (miplevels > 1) {
+        free(curData);
+    }
+    else
+    {
+        stbi_image_free(curData);
+    }
+
+    num_texture_++;
+    return num_texture_ - 1;
+
 }
 
 int Scene::CreateProceduralTexture(int width, int height, 
