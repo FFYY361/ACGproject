@@ -39,11 +39,11 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
     lights_.push_back(*light);
     glm::vec3 pos = light->position;
     if (light->type == 0) { // Point light
-        const float scale = 0.09f;
+        const float scale = 0.0009f;
         glm::mat4 T = glm::translate(glm::mat4(1.0f), pos);
         glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
         auto point_light = std::make_shared<Entity>(
-            PROJECT_DIR "/meshes/simple_sphere.obj",
+            PROJECT_DIR "/meshes/sphere.obj",
             Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color),
 		    T*S
         );
@@ -378,12 +378,15 @@ int Scene::AddTexture(const std::string& file_path) {
     
     // 上传图片数据到GPU
     texture->UploadData(data);
+
     
     // 释放stb_image分配的CPU内存
     stbi_image_free(data);
-    
+
     // 添加到纹理列表
     textures_.push_back(std::move(texture));
+    grassland::LogInfo("Added texture to scene (index {}, {}x{})", 
+		textures_.size() - 1, width, height);
     return static_cast<int>(textures_.size() - 1);
 }
 

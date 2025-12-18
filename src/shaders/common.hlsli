@@ -31,6 +31,7 @@ struct Material
     float3 emission; // 后面做光源时会用到
     float ior;           // Index of refraction
     int texture_id;      // -1 = no texture, >= 0 = texture array index
+    int material_id;
 };
 
 struct EntityInfo

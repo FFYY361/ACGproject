@@ -234,6 +234,7 @@ out float w_spec, out float w_diff, out float w_trans
     float Fresnel = F_Dielectric(abs(dot(V, N)), eta);
     
     w_spec = lerp(Fresnel, 1.0, metallic);
+    //w_spec = metallic;
     w_diff = (1.0 - metallic) * (1.0 - Fresnel) * (1.0 - transmission);
     w_trans = (1.0 - metallic) * (1.0 - Fresnel) * transmission;
     
@@ -258,7 +259,7 @@ BSDFSample EvalBSDF(
     ret.direction = L;
     ret.bsdf = 0;
     ret.pdf = 0;
-    bool isTransmission = (IsSameHemisphere(V, L, N) == false);
+    bool isTransmission = !(dot(V, N) * dot(L, N) > 0.0);
     
     float f0 = pow((1 - ior) / (1 + ior), 2.0); // 非金属部分的F0)
     float3 F0 = lerp(float3(f0, f0, f0), basecolor, metallic);
@@ -268,6 +269,12 @@ BSDFSample EvalBSDF(
     if (isTransmission)
     {
         H = normalize(eta * V + L);
+        if (IsSameHemisphere(V, L, H) == true)
+        {
+            ret.bsdf = 0;
+            ret.pdf = 0;
+            return ret;
+        }
     }
     else
     {
@@ -291,7 +298,7 @@ BSDFSample EvalBSDF(
     
     if (isTransmission == true)
     {
-        float3 H = normalize(eta * V + L);
+        //float3 H = N;
            
         float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
         float D = D_GGX(abs(dot(N, H)), alpha);
@@ -305,7 +312,9 @@ BSDFSample EvalBSDF(
         float jacobian = (abs(dot(V, H))) / denom;
         float pdfL = pdfH * jacobian;
         ret.pdf += pTrans * pdfL;
+        //ret.bsdf = abs(dot(V, H)) * abs(dot(L, H));
         //ret.bsdf /= pTrans;
+        //ret.bsdf = D;
     }
     else
     {

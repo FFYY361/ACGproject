@@ -878,7 +878,7 @@ void Application::OnRender() {
 	for (size_t i = 0; i < scene_->GetTextureCount(); ++i) {
 	    texture_images.push_back(scene_->GetTexture(i));
 	}
-	//command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(14, { scene_->GetTextureSampler() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
     command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);
