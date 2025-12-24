@@ -18,23 +18,23 @@
 
 
 // ===============================================================================================
-// 0. ½á¹¹Ìå¶¨Òå (Required)
+// 0. ç»“æ„ä½“å®šä¹‰ (Required)
 // ===============================================================================================
 struct BSDFSample
 {
-    float3 direction; // ²ÉÑùµÄ³öÉä·½Ïò L
-    float pdf; // ²ÉÑù¸Ã·½ÏòµÄ¸ÅÂÊÃÜ¶È
-    float3 bsdf; // f(V, L) * CosTheta (×¢Òâ£ºÍ¨³£PBRäÖÈ¾Æ÷ÖĞÏ°¹ß·µ»Ø f * dot(N,L)£¬ÕâÀïÎÒÃÇÑÏ¸ñ¼ÆËã f)
-                      // *µ«ÔÚÂ·¾¶×·×ÙÖĞ£¬Í¨³£Ö±½Ó·µ»Ø throughput = f * dot(N,L) / pdf¡£
-                      // *ÎªÁË·ûºÏÎïÀí¶¨Òå£¬ÕâÀïµÄ .bsdf ½ö´ú±í BSDFµÄÖµ f(v,l)¡£
-                      // *µ÷ÓÃÕßÔÚ»ı·ÖÊ±ĞèÒª×Ô¼º³Ë dot(N, L)¡£
+    float3 direction; // é‡‡æ ·çš„å‡ºå°„æ–¹å‘ L
+    float pdf; // é‡‡æ ·è¯¥æ–¹å‘çš„æ¦‚ç‡å¯†åº¦
+    float3 bsdf; // f(V, L) * CosTheta (æ³¨æ„ï¼šé€šå¸¸PBRæ¸²æŸ“å™¨ä¸­ä¹ æƒ¯è¿”å› f * dot(N,L)ï¼Œè¿™é‡Œæˆ‘ä»¬ä¸¥æ ¼è®¡ç®— f)
+                      // *ä½†åœ¨è·¯å¾„è¿½è¸ªä¸­ï¼Œé€šå¸¸ç›´æ¥è¿”å› throughput = f * dot(N,L) / pdfã€‚
+                      // *ä¸ºäº†ç¬¦åˆç‰©ç†å®šä¹‰ï¼Œè¿™é‡Œçš„ .bsdf ä»…ä»£è¡¨ BSDFçš„å€¼ f(v,l)ã€‚
+                      // *è°ƒç”¨è€…åœ¨ç§¯åˆ†æ—¶éœ€è¦è‡ªå·±ä¹˜ dot(N, L)ã€‚
 };
 
 // ===============================================================================================
-// 1. ¸¨ÖúÊıÑ§º¯Êı (GGX, Smith, Fresnel)
+// 1. è¾…åŠ©æ•°å­¦å‡½æ•° (GGX, Smith, Fresnel)
 // ===============================================================================================
 
-// ¸¨Öú£º¼ÆËãÆ½·½
+// è¾…åŠ©ï¼šè®¡ç®—å¹³æ–¹
 float Square(float x)
 {
     return x * x;
@@ -50,7 +50,7 @@ float D_GGX(float NdotH, float alpha)
 }
 
 // Smith Geometry Function (Height-Correlated)
-// ±È·ÖÀëµÄ Smith G ¸ü×¼È·£¬ÄÜÁ¿¸üÊØºã
+// æ¯”åˆ†ç¦»çš„ Smith G æ›´å‡†ç¡®ï¼Œèƒ½é‡æ›´å®ˆæ’
 
 float G1_GGX(float NdotV, float alpha)
 {
@@ -73,7 +73,7 @@ float G_Smith(float NdotV, float NdotL, float alpha)
 }
 
 // Fresnel Schlick
-// F0: ´¹Ö±ÈëÉä·´ÉäÂÊ, F90: ÂÓÉä½Ç·´ÉäÂÊ(Í¨³£Îª1)
+// F0: å‚ç›´å…¥å°„åå°„ç‡, F90: æ å°„è§’åå°„ç‡(é€šå¸¸ä¸º1)
 float3 F_Schlick(float CosTheta, float3 F0)
 {
     return F0 + (1.0 - F0) * pow(max(0.0, 1.0 - CosTheta), 5.0);
@@ -96,12 +96,12 @@ float3 BurleyDiffuseTerm(float3 N, float3 V, float3 L, float roughness)
     return diffuseTerm;
 }
 
-// ÍêÕûµÄ Fresnel Dielectric (¾øÔµÌå¾«È··ÆÄù¶û)
-// ÓÃÓÚ´¦ÀíÕÛÉäºÍ·´ÉäµÄ¾«È·±ÈÀı
+// å®Œæ•´çš„ Fresnel Dielectric (ç»ç¼˜ä½“ç²¾ç¡®è²æ¶…å°”)
+// ç”¨äºå¤„ç†æŠ˜å°„å’Œåå°„çš„ç²¾ç¡®æ¯”ä¾‹
 float F_Dielectric(float CosTheta, float eta)
 {
     float sinThetaT2 = eta * eta * (1.0 - CosTheta * CosTheta);
-    // È«ÄÚ·´Éä (Total Internal Reflection)
+    // å…¨å†…åå°„ (Total Internal Reflection)
     if (sinThetaT2 > 1.0)
         return 1.0;
 
@@ -138,7 +138,7 @@ void BuildOrthonormalBasis(float3 N, out float3 T, out float3 B)
     B = cross(N, T);
 }
 
-// ²ÉÑùÓàÏÒ¼ÓÈ¨°ëÇò (ÓÃÓÚÂş·´Éä)
+// é‡‡æ ·ä½™å¼¦åŠ æƒåŠçƒ (ç”¨äºæ¼«åå°„)
 float3 SampleCosineWeightedHemisphere(float3 N, inout uint seed)
 {
     float u1 = next_rand(seed);
@@ -155,9 +155,9 @@ float3 SampleCosineWeightedHemisphere(float3 N, inout uint seed)
 
 
 
-// ²ÉÑù GGX Î¢±íÃæ·¨Ïß H
-// ·µ»Ø: ±¾µØ×ø±êÏµÏÂµÄ H (ÇĞÏß¿Õ¼ä) »òÕß ÊÀ½ç¿Õ¼äÏÂµÄ H (È¡¾öÓÚ´«ÈëµÄ N)
-// ÕâÀï¼ÙÉè´«ÈëµÄ N ÊÇÊÀ½ç¿Õ¼ä£¬ÎÒÃÇ¹¹½¨ TBN ½øĞĞ²ÉÑù
+// é‡‡æ · GGX å¾®è¡¨é¢æ³•çº¿ H
+// è¿”å›: æœ¬åœ°åæ ‡ç³»ä¸‹çš„ H (åˆ‡çº¿ç©ºé—´) æˆ–è€… ä¸–ç•Œç©ºé—´ä¸‹çš„ H (å–å†³äºä¼ å…¥çš„ N)
+// è¿™é‡Œå‡è®¾ä¼ å…¥çš„ N æ˜¯ä¸–ç•Œç©ºé—´ï¼Œæˆ‘ä»¬æ„å»º TBN è¿›è¡Œé‡‡æ ·
 float3 SampleGGX(float3 N, float alpha, inout uint seed)
 {
     float u1 = next_rand(seed);
@@ -181,53 +181,53 @@ float3 SampleGGXVNDF(float3 V, float3 N, float alpha, inout uint seed)
 {
     if (dot(N, V) < 0.0)
     {
-        // ±£Ö¤ V ÔÚ N µÄÍ¬Ò»°ëÇò
+        // ä¿è¯ V åœ¨ N çš„åŒä¸€åŠçƒ
         V = -V;
     }
     
     
-    // 1. ¹¹½¨Õı½»»ù
+    // 1. æ„å»ºæ­£äº¤åŸº
     float3 T, B;
     BuildOrthonormalBasis(N, T, B);
 
-    // 2. ×ªµ½¾Ö²¿¿Õ¼ä
+    // 2. è½¬åˆ°å±€éƒ¨ç©ºé—´
     float3 Vlocal = float3(dot(V, T), dot(V, B), dot(V, N));
 
-    // 3. À­ÉìÊÓÏß
+    // 3. æ‹‰ä¼¸è§†çº¿
     float3 Vh = normalize(float3(alpha * Vlocal.x, alpha * Vlocal.y, Vlocal.z));
 
-    // 4. ¹¹½¨¾Ö²¿»ù
+    // 4. æ„å»ºå±€éƒ¨åŸº
     float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
     float3 T1 = lensq > 0.0
         ? float3(-Vh.y, Vh.x, 0.0) / sqrt(lensq)
         : float3(1.0, 0.0, 0.0);
     float3 T2 = cross(Vh, T1);
 
-    // 5. ²ÉÑùµ¥Î»ÅÌ
+    // 5. é‡‡æ ·å•ä½ç›˜
     float r = sqrt(next_rand(seed));
     float phi = 2.0 * PI * next_rand(seed);
     float t1 = r * cos(phi);
     float t2 = r * sin(phi);
 
-    // 6. ¿É¼ûĞÔĞŞÕı
+    // 6. å¯è§æ€§ä¿®æ­£
     float s = 0.5 * (1.0 + Vh.z);
     t2 = lerp(sqrt(max(0.0, 1.0 - t1 * t1)), t2, s);
 
-    // 7. µÃµ½¿É¼û·¨Ïß
+    // 7. å¾—åˆ°å¯è§æ³•çº¿
     float3 Nh = t1 * T1 + t2 * T2 +
                 sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
 
-    // 8. ·´À­Éì
+    // 8. åæ‹‰ä¼¸
     float3 Hlocal = normalize(float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z)));
 
-    // 9. »Øµ½ÊÀ½ç¿Õ¼ä
+    // 9. å›åˆ°ä¸–ç•Œç©ºé—´
     return normalize(T * Hlocal.x + B * Hlocal.y + N * Hlocal.z);
 }
 
 
 
 
-// ¼ì²éÏòÁ¿ÊÇ·ñÔÚÍ¬Ò»°ëÇò
+// æ£€æŸ¥å‘é‡æ˜¯å¦åœ¨åŒä¸€åŠçƒ
 bool IsSameHemisphere(float3 A, float3 B, float3 N)
 {
     return dot(A, N) * dot(B, N) > 0.0;
@@ -235,8 +235,8 @@ bool IsSameHemisphere(float3 A, float3 B, float3 N)
 
 
 // ===============================================================================================
-// 3. Sample º¯ÊıÊµÏÖ
-// ²ÉÑùÏÂÒ»Ìõ¹âÏß L
+// 3. Sample å‡½æ•°å®ç°
+// é‡‡æ ·ä¸‹ä¸€æ¡å…‰çº¿ L
 // ===============================================================================================
 
 void GetLobeWeight(
@@ -263,7 +263,7 @@ BSDFSample EvalBSDF(
     Material mat
 )
 {
-    float alpha = max(0.001, mat.roughness * mat.roughness); // ·ÀÖ¹³ıÁã
+    float alpha = max(0.001, mat.roughness * mat.roughness); // é˜²æ­¢é™¤é›¶
     float metallic = mat.metallic;
     float ior = mat.ior;
     float transmission = mat.transmission;
@@ -275,7 +275,7 @@ BSDFSample EvalBSDF(
     ret.pdf = 0;
     bool isTransmission = !(dot(V, N) * dot(L, N) > 0.0);
     
-    float f0 = pow((1 - ior) / (1 + ior), 2.0); // ·Ç½ğÊô²¿·ÖµÄF0)
+    float f0 = pow((1 - ior) / (1 + ior), 2.0); // éé‡‘å±éƒ¨åˆ†çš„F0)
     float3 F0 = lerp(float3(f0, f0, f0), basecolor, metallic);
     
     float3 H;
@@ -363,15 +363,15 @@ bool SampleBSDF(
     inout RayPayload payload
 )
 {
-    // ²ÎÊıÔ¤´¦Àí
-    float alpha = max(0.001, mat.roughness * mat.roughness); // ·ÀÖ¹³ıÁã
+    // å‚æ•°é¢„å¤„ç†
+    float alpha = max(0.001, mat.roughness * mat.roughness); // é˜²æ­¢é™¤é›¶
     float metallic = mat.metallic;
     float ior = mat.ior;
     float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
     float transmission = mat.transmission;
     float3 basecolor = mat.base_color;
     
-    // lobe¸ÅÂÊ¹À¼Æ
+    // lobeæ¦‚ç‡ä¼°è®¡
     float wSpec;
     float wDiff;
     float wTrans;
@@ -392,7 +392,7 @@ bool SampleBSDF(
     if (randLobe < pDiff)
     {
         L = SampleCosineWeightedHemisphere(N, seed);
-        float k = 0.5; // µ÷ÕûÒò×Ó£¬¸ù¾İĞèÒªµ÷Õû
+        float k = 0.5; // è°ƒæ•´å› å­ï¼Œæ ¹æ®éœ€è¦è°ƒæ•´
         float theta = (PI / 2.0);
         payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
 
@@ -402,8 +402,8 @@ bool SampleBSDF(
         float3 H = SampleGGXVNDF(V, N, alpha, seed);
         L = reflect(-V, H);
         if (IsSameHemisphere(L, V, N) == false)
-            return false; // ÎŞĞ§²ÉÑù
-        float k = 0; // µ÷ÕûÒò×Ó£¬¸ù¾İĞèÒªµ÷Õû
+            return false; // æ— æ•ˆé‡‡æ ·
+        float k = 0; // è°ƒæ•´å› å­ï¼Œæ ¹æ®éœ€è¦è°ƒæ•´
         float theta = atan(2 * mat.roughness);
         payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
 
@@ -414,16 +414,16 @@ bool SampleBSDF(
         bool tir = refract(-V, H, eta, L);
         if (tir)
         {
-            L = reflect(-V, H); // È«ÄÚ·´Éä£¬¸ÄÎª·´Éä
+            L = reflect(-V, H); // å…¨å†…åå°„ï¼Œæ”¹ä¸ºåå°„
         }
         else
             if (IsSameHemisphere(L, V, N) == true)
-                return false; // ÎŞĞ§²ÉÑù
+                return false; // æ— æ•ˆé‡‡æ ·
         Debug = true;
         debugValue = L;
         payload.angle *= eta;
         
-        float k = 0; // µ÷ÕûÒò×Ó£¬¸ù¾İĞèÒªµ÷Õû
+        float k = 0; // è°ƒæ•´å› å­ï¼Œæ ¹æ®éœ€è¦è°ƒæ•´
         float theta = atan(2 * mat.roughness);
         payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
         //L = dot(V, H);

@@ -429,6 +429,19 @@ void Application::OnUpdate() {
             pending_scene_index_ = -1;
             
             grassland::LogInfo("Scene switch completed successfully");
+
+            
+            camera_pos_ = glm::vec3{ 0.0f, 1.0f, 5.0f };
+            camera_up_ = glm::vec3{ 0.0f, 1.0f, 0.0f }; // World up
+            camera_speed_ = 0.01f;
+            yaw_ = -90.0f; // Point down -Z
+            pitch_ = 0.0f;
+            glm::vec3 front;
+            front.x = cos(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+            front.y = sin(glm::radians(pitch_));
+            front.z = sin(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+            camera_front_ = glm::normalize(front);
+            // Update the camera buffer with new position/orientation
         }
         
         // Process keyboard input to move camera
@@ -455,7 +468,6 @@ void Application::OnUpdate() {
         hover_info.hovered_entity_id = hovered_entity_id_;
         hover_info_buffer_->UploadData(&hover_info, sizeof(HoverInfo));
 
-        // Update the camera buffer with new position/orientation
         CameraObject camera_object{};
         camera_object.screen_to_camera = glm::inverse(
             glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 10.0f));
