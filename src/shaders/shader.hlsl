@@ -36,21 +36,37 @@ void GetLightInfo(
     }
 }
 
-float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 normal)
+float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 normal, float uv_scale)
 {
-    int text_idx = texture_infos[idx].idx;
-    Texture2D texture = textures[NonUniformResourceIndex(texture_infos[idx].idx)];
+    // 1. 获取基础信息
+    TextureInfo info = texture_infos[idx];
+    int text_idx = info.idx;
+    Texture2D tex = textures[NonUniformResourceIndex(text_idx)];
     uint twidth, theight, numlevel;
-    texture.GetDimensions(0, twidth, theight, numlevel);
-    uint resolution = max(twidth, theight);
-    float area_uv = 1.0; // 假设整个纹理覆盖面积为1
-    float area_pos = width * width; // 近似为正方形区域
-    float texel_size = sqrt(area_uv / area_pos);
-    float mip_level = log2(resolution * texel_size) - log2(abs(dot(ray_dir, normal)) + EPS);
-    mip_level = clamp(mip_level, 0.0, (float) (texture_infos[idx].mipLevels - 1));
+    tex.GetDimensions(0, twidth, theight, numlevel);
+    
+    float resolution = (float) max(twidth, theight);
+
+    // 2. 修正倾斜拉伸 (Anisotropy)
+    // 当光线斜射表面时，足迹（Footprint）会变大
+    // cos_theta 越小（越趋于掠射），footprint 越大，mip 层级越高（越模糊）
+    float cos_theta = abs(dot(ray_dir, normal));
+    float spread_width = width / max(cos_theta, 0.0001f);
+
+    // 3. 计算 Mip Level
+    // 注意：此处假设你的 width 是在世界空间定义的
+    // 你需要一个 texels_per_unit (每单位世界坐标对应多少纹理像素)
+    // 或者是简单的 uv_to_world 比例
+    float uv_per_world_unit = uv_scale; // 这个值通常需要从顶点/材质数据中预计算
+    float mip_level = log2(spread_width * uv_per_world_unit * resolution);
+    
+    //return mip_level;
+    // 4. 边界处理
+    mip_level = clamp(mip_level, 0.0, (float) (numlevel - 1));
     text_idx += (int) mip_level;
-    texture = textures[NonUniformResourceIndex(texture_infos[idx].idx)];
-    return texture.SampleLevel(textureSampler, uv, 0).rgb;
+    tex = textures[NonUniformResourceIndex(text_idx)];
+    //texture = textures[NonUniformResourceIndex(text_idx)];
+    return tex.SampleLevel(textureSampler, uv, 0).rgb;
 }
 
 
@@ -115,7 +131,7 @@ float3 get_target_direction(float2 pixel_center)
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
-    for (int bounce = 0; bounce < 3; bounce++)
+    for (int bounce = 0; bounce < 10; bounce++)
     {
         
         payload.hit = false;
@@ -159,12 +175,14 @@ float3 get_target_direction(float2 pixel_center)
         if (!payload.hit)
         {
             //radiance = 0.0;
-            //radiance += throughput * payload.material.base_color; // 如果 Miss Shader 里设置了 albedo
+            radiance += throughput * payload.material.base_color; // 如果 Miss Shader 里设置了 albedo
             break; // 光线逃逸，结束路径
         }
 
         // --- Case 2: Hit (击中物体) ---
         
+        //radiance = payload.material.base_color;
+        //break;
         float3 P = payload.position;
         float3 N = payload.normal;
         float3 V = -ray.Direction;
@@ -202,7 +220,6 @@ float3 get_target_direction(float2 pixel_center)
             //radiance = float3(0, 0, 0); // 遇到自发光直接结束
             break;
         }
-        //radiance = payload.metallic;
         
         float3 directLightContrib = float3(0, 0, 0);
         
@@ -355,8 +372,8 @@ float3 get_target_direction(float2 pixel_center)
     //  float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     //  payload.color = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
   
-    float3 topColor = float3(0.1, 0.1, 0.1);
-    float3 bottomColor = float3(0.1, 0.1, 0.1);
+    float3 topColor = float3(0.5, 0.5, 0.5);
+    float3 bottomColor = float3(0.5, 0.5, 0.5);
     float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     Material mat;
     mat.base_color = lerp(bottomColor, topColor, t);
@@ -443,11 +460,17 @@ float3 get_target_direction(float2 pixel_center)
     float3 face_normal_ = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
     float3 world_normal_ = normalize(mul((float3x3) entity_info.objectToWorld, face_normal_));
     
+    // calc uv scale
+    float area_uv = length(cross(float3(v1.uv - v0.uv, 0), float3(v2.uv - v0.uv, 0))) * 0.5;
+    float area_3d = length(cross(v1.pos - v0.pos, v2.pos - v0.pos)) * 0.5;
+    float uv_scale = sqrt(area_uv / area_3d);
+    
+    
     
     float3 face_normal = float3(0, 0, 0);
     if (mat.material_id >= 0)
     {
-        float3 normal = MipMapSample(mat.material_id, uv, payload.width, WorldRayDirection(), world_normal_);
+        float3 normal = MipMapSample(mat.material_id, uv, payload.width, WorldRayDirection(), world_normal, uv_scale);
         normal = normal * 2.0 - 1.0; // 从 [0,1] 映射到 [-1,1]
         //normal.y = -normal.y; // 纹理空间到对象空间的 Y 轴翻转
         face_normal = normalize(normal);
@@ -456,7 +479,7 @@ float3 get_target_direction(float2 pixel_center)
     {
         face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
     }
-    
+    //face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
     world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
   
     /*
@@ -486,7 +509,7 @@ float3 get_target_direction(float2 pixel_center)
     
     // 如果有纹理，使用纹理颜色；否则使用材质基础色
     if (mat.texture_id >= 0) {
-        mat.base_color = MipMapSample(mat.texture_id, uv, payload.width, WorldRayDirection(), world_normal);
+        mat.base_color = MipMapSample(mat.texture_id, uv, payload.width, WorldRayDirection(), world_normal, uv_scale);
     }
     payload.material = mat;
 }

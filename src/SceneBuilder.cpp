@@ -140,7 +140,7 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     // === 顶部面光源 ===
     float light_size = 0.7f;
     scene->AddLight(CreateAreaLight(
-        glm::vec3(0.0f, box_size-0.1f, -0.4f),
+        glm::vec3(0.0f, box_size-0.1f, 0.4f),
         glm::vec3(50.0f, 50.0f, 50.0f),
         glm::vec3(0.5, 0.0f, 0.0f),
         glm::vec3(0.0f, 0.0f, 0.5f)
@@ -185,6 +185,8 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     ));
 
 	int idx_normal = scene->AddTexture(PROJECT_DIR "/meshes/sphere_normal.png");
+    int idx_text = scene->AddTexture(PROJECT_DIR "/meshes/cube_color.png");
+    grassland::LogInfo("Added texture with index: {}", idx_text);
 
     // === 场景物体1：镜面球（左后） ===
     scene->AddEntity(CreateSphere(
@@ -201,11 +203,6 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
             -1,
             idx_normal)  // 高度镜面金属
     ));
-
-	int idx_text = scene->AddTexture(PROJECT_DIR "/meshes/cube_normal.png");
-    grassland::LogInfo("Added texture with index: {}", idx_text);
-
-
     // === 场景物体2：透明玻璃立方体（前方，旋转45度） ===
     scene->AddEntity(std::make_shared<Entity>(
         PROJECT_DIR "/meshes/cube.obj",
@@ -219,6 +216,20 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
             glm::vec3(0.5f, 0.5f, 0.5f)
         )
     ));
+
+
+    //scene->AddEntity(std::make_shared<Entity>(
+    //    PROJECT_DIR "/meshes/cube.obj",
+    //    Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.00f, 1.5f, idx_text, -1),  // 透明玻璃 IOR=1.5
+    //    glm::scale(
+    //        glm::rotate(
+    //            glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, -10.0, 0.4f)),
+    //            glm::radians(0.0f),
+    //            glm::vec3(0.0f, 1.0f, 0.0f)  // 绕Y轴旋转
+    //        ),
+    //        glm::vec3(500.0f, 0.1f, 500.0f)
+    //    )
+    //));
 
 
     //scene->AddEntity(CreateCube(
