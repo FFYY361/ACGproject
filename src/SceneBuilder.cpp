@@ -39,6 +39,13 @@ std::shared_ptr<Entity> SceneBuilder::CreateCube(
     );
 }
 
+std::shared_ptr<Entity> SceneBuilder::CreateMultiMaterialEntity(
+    const std::string& obj_path,
+    const glm::mat4& transform
+) {
+    return std::make_shared<Entity>(obj_path, transform, true);
+}
+
 std::shared_ptr<Light> SceneBuilder::CreatePointLight(
     const glm::vec3& position,
     const glm::vec3& color
@@ -792,41 +799,25 @@ void SceneBuilder::BuildProceduralScene(Scene* scene) {
 void SceneBuilder::BuildBedroomScene(Scene* scene) {
     scene->Clear();
     
-    // // === 加载bedroom纹理 ===
-    // int tex1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u1_v1.jpg");
-    // int tex2 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u1_v2.jpg");
-    // int tex3 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v1.jpg");
-    // int tex4 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v2.jpg");
-    // int tex5 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v4.jpg");
-    // int tex6 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u3_v1.jpg");
-    // int tex7 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u4_v1.jpg");
-    
-    // === 加载bedroom模型 ===
-    // 主要的bedroom mesh
-    scene->AddEntity(std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/bedroom/iscv2.obj",
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f),
-        glm::scale(
-            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
-            glm::vec3(1.0f, 1.0f, 1.0f)
-        )
+    // Add area light for illumination
+    scene->AddLight(CreateAreaLight(
+        glm::vec3(0.0f, 3.0f, 0.0f),
+        glm::vec3(50.0f, 50.0f, 50.0f),
+        glm::vec3(2.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 2.0f)
     ));
     
-    // // === 添加一些装饰物体 ===
+    // Load bedroom with multi-material support (true = load materials from MTL)
+    auto bedroom = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/iscv2.obj",
+        glm::mat4(1.0f),
+        true  // Load materials from MTL file
+    );
+    scene->AddEntity(bedroom);
     
-    // // 镜面金属球（装饰品）
-    // scene->AddEntity(CreateSphere(
-    //     glm::vec3(1.5f, 0.5f, 1.0f),
-    //     0.3f,
-    //     Material(glm::vec3(0.95f, 0.95f, 0.95f), 0.05f, 1.0f)
-    // ));
-    
-    // // 玻璃球（装饰品）
-    // scene->AddEntity(CreateSphere(
-    //     glm::vec3(-1.5f, 0.5f, 1.0f),
-    //     0.3f,
-    //     Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, 1.5f)
-    // ));
+    grassland::LogInfo("Bedroom loaded with {} materials and {} submeshes",
+                       bedroom->GetMaterials().size(),
+                       bedroom->GetSubMeshes().size());
     
     scene->BuildAccelerationStructures();
 }

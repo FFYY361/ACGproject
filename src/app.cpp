@@ -307,6 +307,7 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, scene_->GetTextureCount());              // space13 - texture array (bind)
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_SAMPLER, 1);                // space14 - texture sampler
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space15 - textureinfo
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space16 - material IDs
     //program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
     program_->Finalize();
 }
@@ -885,6 +886,7 @@ void Application::OnRender() {
 	command_context->CmdBindResources(11,{ scene_->GetLightInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(12,{ scene_->GetLightsBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
     command_context->CmdBindResources(15,{ scene_->GetTextureInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(16,{ scene_->GetMaterialIdBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	
 	// Bind textures (space13 for texture array, space14 for sampler)
 	// Note: Scene ensures at least one dummy texture exists

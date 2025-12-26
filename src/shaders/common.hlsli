@@ -31,7 +31,9 @@ struct Material
     float3 emission; // 后面做光源时会用到
     float ior;           // Index of refraction
     int texture_id;      // -1 = no texture, >= 0 = texture array index
-    int material_id;
+    int normal_id;       // -1 = no normal map, >= 0 = texture array index for normal map
+    int use_vertex_color;  // 0 = use base_color/texture, 1 = use vertex colors
+    int padding;           // For alignment
 };
 
 struct EntityInfo
@@ -41,6 +43,8 @@ struct EntityInfo
     uint vertexBufferOffset;
     uint indexBufferOffset;
     uint materialOffset;
+    uint materialIdBufferOffset;  // Offset into the material ID buffer
+    uint numMaterials;             // Number of materials for this entity
 };
 
 struct Vertex
@@ -106,6 +110,7 @@ StructuredBuffer<Light> lights : register(t0, space12);
 Texture2D textures[] : register(t0, space13);  // Bindless texture array
 SamplerState textureSampler : register(s0, space14);
 StructuredBuffer<TextureInfo> texture_infos : register(t0, space15);
+StructuredBuffer<uint> material_ids : register(t0, space16);  // Per-triangle material IDs
 
 
 

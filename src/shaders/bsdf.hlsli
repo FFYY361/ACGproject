@@ -22,12 +22,10 @@
 // ===============================================================================================
 struct BSDFSample
 {
-    float3 direction; // 采样的出射方向 L
-    float pdf; // 采样该方向的概率密度
-    float3 bsdf; // f(V, L) * CosTheta (注意：通常PBR渲染器中习惯返回 f * dot(N,L)，这里我们严格计算 f)
-                      // *但在路径追踪中，通常直接返回 throughput = f * dot(N,L) / pdf。
-                      // *为了符合物理定义，这里的 .bsdf 仅代表 BSDF的值 f(v,l)。
-                      // *调用者在积分时需要自己乘 dot(N, L)。
+    float3 direction;     // 采样的出射方向 L
+    float pdf;            // 该方向的总 PDF（考虑所有 lobe）
+    float3 bsdf;          // BSDF 的值 f(v,l)（不含 cos）
+    bool isTransmission;  // 是否是透射
 };
 
 // ===============================================================================================
@@ -244,19 +242,115 @@ float3 V, float3 N, float metallic, float transmission, float eta,
 out float w_spec, out float w_diff, out float w_trans
 )
 {
-    
     float Fresnel = F_Dielectric(abs(dot(V, N)), eta);
     
+    // 金属全是镜面反射
     w_spec = lerp(Fresnel, 1.0, metallic);
-    //w_spec = metallic;
-    w_diff = (1.0 - metallic) * (1.0 - Fresnel) * (1.0 - transmission);
-    w_trans = (1.0 - metallic) * (1.0 - Fresnel) * transmission;
     
+    // 漫反射：非金属 * 透过的能量 * 不透明的部分
+    w_diff = (1.0 - metallic) * (1.0 - Fresnel) * (1.0 - transmission);
+    
+    // 透射：非金属 * 透明度（Fresnel 已经在 BTDF 公式中处理）
+    w_trans = (1.0 - metallic) * transmission;
 }
 
 
 
-BSDFSample EvalBSDF(
+// 仅评估 BSDF 值和 PDF（用于 NEE）
+void EvalBSDFForNEE(
+    float3 V,
+    float3 L,
+    float3 N,
+    Material mat,
+    out float3 bsdf_value,
+    out float pdf
+)
+{
+    float alpha = max(0.001, mat.roughness * mat.roughness);
+    float metallic = mat.metallic;
+    float ior = mat.ior;
+    float transmission = mat.transmission;
+    float3 basecolor = mat.base_color;
+    
+    bsdf_value = float3(0, 0, 0);
+    pdf = 0.0;
+    
+    bool isTransmission = !(dot(V, N) * dot(L, N) > 0.0);
+    
+    float f0 = pow((1 - ior) / (1 + ior), 2.0);
+    float3 F0 = lerp(float3(f0, f0, f0), basecolor, metallic);
+    
+    float3 H;
+    float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
+    
+    if (isTransmission)
+    {
+        H = normalize(eta * V + L);
+        if (IsSameHemisphere(V, L, H))
+        {
+            return; // 无效配置
+        }
+    }
+    else
+    {
+        H = normalize(V + L);
+    }
+    
+    if (dot(H, N) < 0.0)
+        H = -H;
+    
+    float wSpec, wDiff, wTrans;
+    GetLobeWeight(V, H, metallic, transmission, eta, wSpec, wDiff, wTrans);
+    
+    float sumW = wDiff + wSpec + wTrans + 1e-6;
+    float pDiff = wDiff / sumW;
+    float pSpec = wSpec / sumW;
+    float pTrans = wTrans / sumW;
+    
+    if (isTransmission)
+    {
+        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
+        float D = D_GGX(abs(dot(N, H)), alpha);
+        
+        // Fresnel 项：透射部分 = 1 - F
+        float3 F_color = F_Schlick(abs(dot(L, H)), F0);
+        float3 T_color = 1.0 - F_color;
+        
+        float sqrtDenom = eta * abs(dot(V, H)) + abs(dot(L, H));
+        float denom = sqrtDenom * sqrtDenom + EPS;
+        
+        // BTDF 公式（包含 Fresnel 透射系数）
+        float3 btdf = abs(dot(V, H)) * abs(dot(L, H)) * T_color * G * D / (abs(dot(N, V)) * abs(dot(N, L)) * denom + EPS);
+        
+        // 注意：pTrans 不再包含 (1-F)，因为已经在 T_color 中
+        bsdf_value += pTrans * btdf * basecolor;
+        
+        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
+        float jacobian = abs(dot(V, H)) / denom;
+        pdf += pTrans * pdfH * jacobian;
+    }
+    else
+    {
+        // Diffuse
+        bsdf_value += pDiff * BurleyDiffuseTerm(N, V, L, mat.roughness) * basecolor / PI;
+        pdf += pDiff * abs(dot(N, L)) / PI;
+        
+        // Specular
+        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
+        float D = D_GGX(abs(dot(N, H)), alpha);
+        float3 F_color = F_Schlick(abs(dot(V, H)), F0);
+        
+        float3 brdf = F_color * G * D / (4.0 * abs(dot(N, V)) * abs(dot(N, L)) + EPS);
+        bsdf_value += pSpec * brdf;
+        
+        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
+        float jacobian = 1.0 / (4.0 * abs(dot(V, H)) + EPS);
+        pdf += pSpec * pdfH * jacobian;
+    }
+}
+
+// 内部使用：完整评估（返回结构体）
+BSDFSample EvalBSDF_Internal(
     float3 V,
     float3 L,
     float3 N,
@@ -312,23 +406,24 @@ BSDFSample EvalBSDF(
     
     if (isTransmission == true)
     {
-        //float3 H = N;
-           
         float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
         float D = D_GGX(abs(dot(N, H)), alpha);
+        
+        // Fresnel 透射系数
         float3 F_color = F_Schlick(abs(dot(L, H)), F0);
         float3 T_color = 1.0 - F_color;
+        
         float sqrtDenom = eta * abs(dot(V, H)) + abs(dot(L, H));
         float denom = sqrtDenom * sqrtDenom + EPS;
-        float3 btdf = abs(dot(V, H)) * abs(dot(L, H)) * T_color * G * D / (abs(dot(N, V)) * abs(dot(N, L)) * denom);
+        
+        // BTDF
+        float3 btdf = abs(dot(V, H)) * abs(dot(L, H)) * T_color * G * D / (abs(dot(N, V)) * abs(dot(N, L)) * denom + EPS);
         ret.bsdf += pTrans * btdf * basecolor;
-        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / abs(dot(V, N));
-        float jacobian = (abs(dot(V, H))) / denom;
-        float pdfL = pdfH * jacobian;
-        ret.pdf += pTrans * pdfL;
-        //ret.bsdf = abs(dot(V, H)) * abs(dot(L, H));
-        //ret.bsdf /= pTrans;
-        //ret.bsdf = D;
+        
+        // PDF
+        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
+        float jacobian = abs(dot(V, H)) / denom;
+        ret.pdf += pTrans * pdfH * jacobian;
     }
     else
     {
@@ -350,10 +445,11 @@ BSDFSample EvalBSDF(
         ret.pdf += pSpec * pdfL;
         //ret.bsdf /= (pSpec + pDiff);
     }
+    ret.isTransmission = (dot(V, N) * dot(L, N) <= 0.0);
     return ret;
 }
 
-
+// 采样 BSDF（带 MIS 的完整实现）
 bool SampleBSDF(
     float3 V,
     float3 N,
@@ -414,24 +510,36 @@ bool SampleBSDF(
         bool tir = refract(-V, H, eta, L);
         if (tir)
         {
-            L = reflect(-V, H); // 全内反射，改为反射
+            // 全内反射：转为镜面反射
+            L = reflect(-V, H);
+            if (IsSameHemisphere(L, V, N) == false)
+                return false; // 反射方向无效
+            // 不增加 payload.angle，因为这是反射而非折射
+            
+            float k = 0.0;
+            float theta = atan(2.0 * mat.roughness);
+            payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
         }
         else
+        {
+            // 成功折射
             if (IsSameHemisphere(L, V, N) == true)
-                return false; // 无效采样
-        Debug = true;
-        debugValue = L;
-        payload.angle *= eta;
-        
-        float k = 0; // 调整因子，根据需要调整
-        float theta = atan(2 * mat.roughness);
-        payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
-        //L = dot(V, H);
-        //ret = EvalBSDF(V, L, N, mat);
-        //return true;
+                return false; // 无效采样：折射应该在另一半球
+            
+            payload.angle *= eta;
+            
+            float k = 0.0;
+            float theta = atan(2.0 * mat.roughness);
+            payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+        }
     }
-    ret = EvalBSDF(V, L, N, mat);
-    //ret.bsdf = N;
-    //ret.bsdf = Debug? debugValue: 0.1;
+    
+    // 使用内部评估函数获取完整的 BSDF 和 PDF
+    ret = EvalBSDF_Internal(V, L, N, mat);
+    
+    // 验证结果
+    if (ret.pdf < 1e-8 || length(ret.bsdf) < 1e-8)
+        return false;
+    
     return true;
 }

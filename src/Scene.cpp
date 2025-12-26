@@ -82,6 +82,7 @@ void Scene::Clear() {
 	indices_buffer_.reset();
 	entity_info_buffer_.reset();
 	light_info_buffer_.reset();
+	material_id_buffer_.reset();
     lights_.clear();
     num_texture_ = 0;
 	grassland::LogInfo("Cleared scene");
@@ -194,30 +195,42 @@ void Scene::UpdateBuffers() {
 
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+    std::vector<uint32_t> material_ids;  // Per-triangle material IDs
 
     uint32_t vertex_buffer_offset = 0;
     uint32_t index_buffer_offset = 0;
     uint32_t material_offset = 0;
+    uint32_t material_id_buffer_offset = 0;
+    
+    size_t entity_idx = 0;
     for (const auto& entity : entities_) {
         EntityInfo info{};
         info.vertexBufferOffset = vertex_buffer_offset;
         info.indexBufferOffset = index_buffer_offset;
         info.materialOffset = material_offset;
+        info.materialIdBufferOffset = material_id_buffer_offset;
         info.objectToWorld = entity->GetTransform();
         info.worldToObject = glm::inverse(entity->GetTransform());
 
-
-        materials.push_back(entity->GetMaterial());
+        // Collect materials from entity (may have multiple)
+        const auto& entity_materials = entity->GetMaterials();
+        info.numMaterials = static_cast<uint32_t>(entity_materials.size());
+        
+        for (const auto& mat : entity_materials) {
+            materials.push_back(mat);
+        }
+        
         entity_infos.push_back(info);
 
         // Append vertex data
         const auto& mesh = entity->GetMesh();
         uint32_t num_vertices = mesh.NumVertices();
         uint32_t num_indices = mesh.NumIndices();
+        uint32_t num_triangles = num_indices / 3;
+        
         for (uint32_t v = 0; v < num_vertices; ++v) {
             Vertex vert{};
             grassland::Vector3<float> pos = mesh.Positions()[v];
-            //const auto pos = mesh.Positions()[v];
             vert.pos = glm::vec3(pos[0], pos[1], pos[2]);
             grassland::Vector3<float> norm = mesh.Normals() ? mesh.Normals()[v] : grassland::Vector3<float>{ 0.0f, 0.0f, 0.0f };
             vert.normal = glm::vec3(norm[0], norm[1], norm[2]);
@@ -230,12 +243,41 @@ void Scene::UpdateBuffers() {
             }
             vertices.push_back(vert);
         }
-        // Append index data (with offset)
+        
+        // Append index data
         for (uint32_t idx = 0; idx < num_indices; ++idx) {
             indices.push_back(mesh.Indices()[idx]);
         }
+        
+        // Append material IDs (per triangle)
+        // Read from entity's BuildMaterialIdBuffer result
+        const auto& entity_material_ids = entity->GetMesh(); // TODO: need getter for material_ids_
+        
+        // For now, manually build material IDs from submeshes
+        const auto& submeshes = entity->GetSubMeshes();
+        
+        // If no submeshes, create a default one (this shouldn't happen, but safety check)
+        if (submeshes.empty()) {
+            grassland::LogWarning("Entity {} has no submeshes, using default", entity_idx);
+            for (uint32_t tri = 0; tri < num_triangles; ++tri) {
+                material_ids.push_back(material_offset);
+            }
+        } else {
+            for (const auto& submesh : submeshes) {
+                uint32_t submesh_triangles = submesh.index_count / 3;
+                uint32_t global_material_id = material_offset + submesh.material_index;
+                
+                for (uint32_t tri = 0; tri < submesh_triangles; ++tri) {
+                    material_ids.push_back(global_material_id);
+                }
+            }
+        }
+        
         vertex_buffer_offset += num_vertices;
         index_buffer_offset += num_indices;
+        material_offset += static_cast<uint32_t>(entity_materials.size());
+        material_id_buffer_offset += num_triangles;
+        entity_idx++;
     }
 
     EntityInfo debug_info = entity_infos[0];
@@ -281,6 +323,16 @@ void Scene::UpdateBuffers() {
     }
     indices_buffer_->UploadData(indices.data(), indices_buffer_size);
 	grassland::LogInfo("Updated index buffer with {} indices, each of size {}", indices.size(), sizeof(uint32_t));
+
+    // Create/update material ID buffer
+    size_t material_id_buffer_size = material_ids.size() * sizeof(uint32_t);
+    if (!material_id_buffer_) {
+        core_->CreateBuffer(material_id_buffer_size,
+                          grassland::graphics::BUFFER_TYPE_DYNAMIC,
+                          &material_id_buffer_);
+    }
+    material_id_buffer_->UploadData(material_ids.data(), material_id_buffer_size);
+    grassland::LogInfo("Updated material ID buffer with {} triangle IDs", material_ids.size());
 
 	// Create/update texturesinfo buffer
     if (texture_infos_.size() == 0) {

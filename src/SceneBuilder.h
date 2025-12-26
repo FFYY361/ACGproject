@@ -57,6 +57,12 @@ private:
         const Material& material = Material()
     );
     
+    // Helper to create an entity with multi-material support from OBJ+MTL
+    static std::shared_ptr<Entity> CreateMultiMaterialEntity(
+        const std::string& obj_path,
+        const glm::mat4& transform = glm::mat4(1.0f)
+    );
+    
     // Light creation helpers (returns Light struct, not Entity)
     static std::shared_ptr<Light> CreatePointLight(
         const glm::vec3& position,
