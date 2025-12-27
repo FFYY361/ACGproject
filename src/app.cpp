@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <random>
 
 namespace {
 #include "built_in_shaders.inl"
@@ -25,6 +26,7 @@ Application::Application(grassland::graphics::BackendAPI api) {
 
     grassland::LogInfo("Device Name: {}", core_->DeviceName());
     grassland::LogInfo("- Ray Tracing Support: {}", core_->DeviceRayTracingSupport());
+    start_time_ = std::chrono::steady_clock::now();
 }
 
 Application::~Application() {
@@ -272,7 +274,14 @@ void Application::OnInit() {
         glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 10.0f));
     camera_object.camera_to_world =
         glm::inverse(glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_));
+    // Initialize previous transform to current (no motion on first frame)
+    camera_object.camera_to_world_prev = camera_object.camera_to_world;
+    camera_object.shutterOpen = shutter_open_;
+    camera_object.shutterClose = shutter_close_; // default small shutter interval
+    camera_object.aperture = aperture_;
+    camera_object.focusDist = focus_distance_;
     camera_object_buffer_->UploadData(&camera_object, sizeof(CameraObject));
+    last_camera_to_world_ = camera_object.camera_to_world;
 
     core_->CreateImage(window_->GetWidth(), window_->GetHeight(), grassland::graphics::IMAGE_FORMAT_R32G32B32A32_SFLOAT,
         &color_image_);
@@ -415,7 +424,7 @@ void Application::OnUpdate() {
         if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
             const char* scene_names[] = {
                 "Default Scene", "Cornell Box", "Cornell Box 2", "Glass Test",
-                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene", "Bedroom split"
+                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene", "Bedroom split", "Motion Test"
             };
             
             grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
@@ -433,7 +442,8 @@ void Application::OnUpdate() {
                 case 6: SceneBuilder::BuildCornellBox4(scene_.get()); break;
                 case 7: SceneBuilder::BuildProceduralScene(scene_.get()); break;
                 case 8: SceneBuilder::BuildBedroomScene(scene_.get()); break;
-                case 9: SceneBuilder::BuildBedroomSplitScene(scene_.get()); break;
+                case 9: SceneBuilder::BuildBedroomSplitScene(scene_.get()); break; 
+                case 10: SceneBuilder::BuildMotionTestScene(scene_.get()); break;
             }
             
             // Wait for scene rebuild to complete
@@ -492,15 +502,42 @@ void Application::OnUpdate() {
 
         CameraObject camera_object{};
         camera_object.screen_to_camera = glm::inverse(
-            glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 10.0f));
+            glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 100.0f));
         camera_object.camera_to_world =
             glm::inverse(glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_));
+        // Provide the previous camera-to-world for motion blur interpolation
+        camera_object.camera_to_world_prev = last_camera_to_world_;
+        // shutter and DOF values from UI
+        camera_object.shutterOpen = shutter_open_;
+        camera_object.shutterClose = shutter_close_;
+        camera_object.aperture = aperture_;
+        camera_object.focusDist = focus_distance_;
         camera_object_buffer_->UploadData(&camera_object, sizeof(CameraObject));
+        last_camera_to_world_ = camera_object.camera_to_world;
 
 
         // Optional: Animate entities
-        // For now, entities are static. You can update their transforms and call:
-        // scene_->UpdateInstances();
+        // Animate entities for Motion Test scene
+        if (current_scene_index_ == 9) {
+            auto entities = scene_->GetEntities();
+            if (entities.size() >= 4) {
+                float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - start_time_).count();
+                // moving sphere (entity index 2)
+                glm::mat4 T_sphere = glm::translate(glm::mat4(1.0f), glm::vec3(sin(t) * 1.0f, -0.5f, -2.0f + cos(t) * 0.3f));
+                T_sphere = glm::scale(T_sphere, glm::vec3(0.5f));
+                entities[2]->SetTransform(T_sphere);
+
+                // moving cube (entity index 3)
+                glm::mat4 R = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
+                glm::mat4 T_cube = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f + sin(t) * 0.5f, -0.5f, -2.0f));
+                T_cube = T_cube * R;
+                T_cube = glm::scale(T_cube, glm::vec3(0.8f));
+                entities[3]->SetTransform(T_cube);
+
+                scene_->UpdateInstances();
+                film_->Reset();
+            }
+        }
     }
 }
 
@@ -606,6 +643,61 @@ void Application::RenderInfoOverlay() {
     ImGui::Text("Yaw: %.1f掳  Pitch: %.1f掳", yaw_, pitch_);
     ImGui::Text("Speed: %.3f", camera_speed_);
     ImGui::Text("Sensitivity: %.2f", mouse_sensitivity_);
+
+    // DOF and shutter controls
+    ImGui::Spacing();
+    ImGui::Text("Depth of Field / Motion Blur");
+    if (ImGui::SliderFloat("Aperture (lens radius)", &aperture_, 0.0f, 0.5f)) {
+        film_->Reset();
+    }
+    if (ImGui::SliderFloat("Focus Distance", &focus_distance_, 0.1f, 2.0f)) {
+        film_->Reset();
+    }
+    if (ImGui::SliderFloat("Shutter Open", &shutter_open_, 0.0f, 0.5f)) {
+        film_->Reset();
+    }
+    if (ImGui::SliderFloat("Shutter Close", &shutter_close_, 0.0f, 0.5f)) {
+        film_->Reset();
+    }
+    if (shutter_close_ < shutter_open_) shutter_close_ = shutter_open_;
+    if (ImGui::SliderInt("Samples Per Frame", &samples_per_frame_, 1, 16)) {
+        // no-op except reset
+        film_->Reset();
+    }
+    // Reset camera button
+    if (ImGui::Button("Reset Camera")) {
+        // Reset camera transform to default
+        camera_pos_ = glm::vec3{ 0.0f, 1.0f, 5.0f };
+        yaw_ = -90.0f;
+        pitch_ = 0.0f;
+        glm::vec3 front;
+        front.x = cos(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+        front.y = sin(glm::radians(pitch_));
+        front.z = sin(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+        camera_front_ = glm::normalize(front);
+
+        // Reset DOF and shutter to defaults
+        aperture_ = 0.0f;
+        focus_distance_ = 5.0f;
+        shutter_open_ = 0.0f;
+        shutter_close_ = 0.02f;
+
+        // Reset accumulation
+        film_->Reset();
+
+        // Update camera buffer immediately so the view updates without waiting for OnUpdate
+        CameraObject camera_object{};
+        camera_object.screen_to_camera = glm::inverse(
+            glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 100.0f));
+        camera_object.camera_to_world = glm::inverse(glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_));
+        camera_object.camera_to_world_prev = camera_object.camera_to_world;
+        camera_object.shutterOpen = shutter_open_;
+        camera_object.shutterClose = shutter_close_;
+        camera_object.aperture = aperture_;
+        camera_object.focusDist = focus_distance_;
+        camera_object_buffer_->UploadData(&camera_object, sizeof(CameraObject));
+        last_camera_to_world_ = camera_object.camera_to_world;
+    }
 
     ImGui::Spacing();
 
@@ -861,7 +953,8 @@ void Application::RenderSceneSelector() {
         "Cornell Box 4",
         "Procedural Scene",
         "Bedroom Scene",
-        "Bedroom Split"
+        "Bedroom Split",
+        "Motion Test"
     };
     
     ImGui::Text("Select Scene:");
@@ -916,10 +1009,43 @@ void Application::OnRender() {
 	for (size_t i = 0; i < scene_->GetTextureCount(); ++i) {
 	    texture_images.push_back(scene_->GetTexture(i));
 	}
+
 	command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(14, { scene_->GetTextureSampler() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
-    command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);
+    // Dispatch multiple times per frame to increase effective SPP if requested
+    // To simulate motion blur for objects, for each sample we interpolate each entity's transform
+    // between its previous and current transform according to a random time in [0,1], update TLAS instances,
+    // dispatch rays, and accumulate. Finally restore original transforms.
+    auto entities = scene_->GetEntities();
+    std::vector<glm::mat4> orig_transforms;
+    orig_transforms.reserve(entities.size());
+    for (auto &e : entities) orig_transforms.push_back(e->GetTransform());
+
+    std::mt19937 rng(static_cast<uint32_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+    std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+
+    for (int s = 0; s < samples_per_frame_; ++s) {
+        float alpha = dist01(rng); // random time in shutter interval
+
+        // Interpolate entity transforms and update TLAS instances
+        for (size_t i = 0; i < entities.size(); ++i) {
+            auto &ent = entities[i];
+            glm::mat4 prevT = ent->GetPreviousTransform();
+            glm::mat4 curT = orig_transforms[i];
+            glm::mat4 interp = prevT * (1.0f - alpha) + curT * alpha;
+            ent->SetTransformNoPrev(interp);
+        }
+        scene_->UpdateInstances();
+
+        command_context->CmdDispatchRays(window_->GetWidth(), window_->GetHeight(), 1);
+    }
+
+    // Restore original transforms and TLAS
+    for (size_t i = 0; i < entities.size(); ++i) {
+        entities[i]->SetTransformNoPrev(orig_transforms[i]);
+    }
+    scene_->UpdateInstances();
     
     // When camera is disabled, increment sample count and use accumulated image
     grassland::graphics::Image* display_image = color_image_.get();

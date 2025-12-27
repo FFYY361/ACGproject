@@ -83,12 +83,14 @@ void Scene::Clear() {
 	entity_info_buffer_.reset();
 	light_info_buffer_.reset();
 	material_id_buffer_.reset();
-	texture_info_buffer_.reset();
     lights_.clear();
-	textures_.clear();
-	texture_infos_.clear();
+
+    // Clear texture resources and metadata to avoid stale bindings after scene switch
+    textures_.clear();
+    texture_infos_.clear();
+    texture_info_buffer_.reset();
+    texture_sampler_.reset();
     num_texture_ = 0;
-	//texture_sampler_ = nullptr;
 	grassland::LogInfo("Cleared scene");
 }
 
@@ -215,6 +217,8 @@ void Scene::UpdateBuffers() {
         info.materialIdBufferOffset = material_id_buffer_offset;
         info.objectToWorld = entity->GetTransform();
         info.worldToObject = glm::inverse(entity->GetTransform());
+        info.objectToWorldPrev = entity->GetPreviousTransform();
+        info.worldToObjectPrev = glm::inverse(entity->GetPreviousTransform());
 
         // Collect materials from entity (may have multiple)
         const auto& entity_materials = entity->GetMaterials();
@@ -286,6 +290,20 @@ void Scene::UpdateBuffers() {
 
     EntityInfo debug_info = entity_infos[0];
 
+    // Diagnostic mapping: print each entity -> submesh -> local material -> global material -> texture_id
+    // for (size_t ei = 0; ei < entities_.size(); ++ei) {
+    //     const auto& info = entity_infos[ei];
+    //     const auto& ent = entities_[ei];
+    //     const auto& submeshes = ent->GetSubMeshes();
+    //     for (size_t si = 0; si < submeshes.size(); ++si) {
+    //         uint32_t local_mat = submeshes[si].material_index;
+    //         uint32_t global_mat = info.materialOffset + local_mat;
+    //         int tex_id = -1;
+    //         if (global_mat < materials.size()) tex_id = materials[global_mat].texture_id;
+    //         grassland::LogInfo("Entity {} SubMesh {}: local_mat={}, global_mat={}, texture_id={}", ei, si, local_mat, global_mat, tex_id);
+    //     }
+    // }
+
 
 
 	// Create/update materials buffer
@@ -352,6 +370,14 @@ void Scene::UpdateBuffers() {
 	texture_info_buffer_->UploadData(texture_infos_.data(), texture_info_buffer_size);
 	grassland::LogInfo("Updated texture info buffer with {} texture infos, each of size {}", texture_infos_.size(), sizeof(TextureInfo));
 
+    // Diagnostic: print mapping between texture_infos and actual images
+    // grassland::LogInfo("Total images in textures_ (all mips combined): {}", textures_.size());
+    // for (size_t i = 0; i < texture_infos_.size(); ++i) {
+    //     int base = texture_infos_[i].idx;
+    //     int mips = texture_infos_[i].mipLevels;
+    //     grassland::LogInfo("TextureInfo[{}]: base_idx={}, mipLevels={}, occupies [{} .. {}]", i, base, mips, base, base + mips - 1);
+    // }
+
 
 	light_info_.num_light = static_cast<int>(lights_.size());
     if (light_info_.num_light == 0)
@@ -411,8 +437,7 @@ int Scene::AddTexture(const std::string& file_path) {
     if (!data) {
         return -1;
         grassland::LogError("Failed to load texture: {}", file_path);
-        grassland::LogWarning("Creating checkerboard texture as fallback");
-        
+        // grassland::LogWarning("Creating checkerboard texture as fallback for {}", file_path);
         // 加载失败，创建棋盘格纹理作为后备
         auto checkerboard = [](float u, float v) -> glm::vec4 {
             int checker_size = 8;

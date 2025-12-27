@@ -9,6 +9,7 @@ Entity::Entity(const std::string& obj_file_path,
                const glm::mat4& transform)
     : material_(material)
     , transform_(transform)
+    , prev_transform_(transform)
     , mesh_loaded_(false) {
     
     LoadMesh(obj_file_path);
@@ -25,6 +26,7 @@ Entity::Entity(const std::string& obj_file_path,
                bool load_materials_from_mtl)
     : material_(Material())
     , transform_(transform)
+    , prev_transform_(transform)
     , mesh_loaded_(false) {
     
     if (load_materials_from_mtl) {
@@ -301,5 +303,18 @@ void Entity::BuildBLAS(grassland::graphics::Core* core) {
         &blas_);
 
     grassland::LogInfo("Built BLAS for entity with {} materials", materials_.size());
+}
+
+void Entity::SetTransform(const glm::mat4& transform) {
+    // prev_transform_ = transform_;
+    transform_ = transform;
+}
+
+void Entity::SetPreviousTransform(const glm::mat4& prev_transform) {
+    prev_transform_ = prev_transform;
+}
+
+void Entity::SetTransformNoPrev(const glm::mat4& transform) {
+    transform_ = transform;
 }
 

@@ -10,6 +10,11 @@ struct CameraInfo
 {
     float4x4 screen_to_camera;
     float4x4 camera_to_world;
+    float4x4 camera_to_world_prev; // previous frame/camera transform for motion blur
+    float shutterOpen; // shutter open time (e.g., 0.0)
+    float shutterClose; // shutter close time (e.g., 0.02)
+    float aperture; // lens radius (world units)
+    float focusDist; // focus distance for thin-lens model
 };
 
 struct HoverInfo
@@ -40,6 +45,8 @@ struct EntityInfo
 {
     float4x4 objectToWorld;
     float4x4 worldToObject;
+    float4x4 objectToWorldPrev;
+    float4x4 worldToObjectPrev;
     uint vertexBufferOffset;
     uint indexBufferOffset;
     uint materialOffset;
@@ -80,6 +87,7 @@ struct RayPayload
     float3 dPdY;
     float3 dDdX;
     float3 dDdY;
+    float time; // ray time for motion blur
 };
 
 struct Light

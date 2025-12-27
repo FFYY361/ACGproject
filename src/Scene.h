@@ -8,6 +8,8 @@
 struct EntityInfo {
     glm::mat4 objectToWorld;
     glm::mat4 worldToObject;
+    glm::mat4 objectToWorldPrev; // Added for previous frame transform
+    glm::mat4 worldToObjectPrev;  // Added for previous frame transform
     uint32_t vertexBufferOffset;
     uint32_t indexBufferOffset;
     uint32_t materialOffset;

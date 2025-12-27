@@ -39,13 +39,11 @@ public:
     // Build a scene showcasing different materials
     static void BuildMaterialShowcase(Scene* scene);
     
+    // Build a simple motion test scene with moving sphere/cube
+    static void BuildMotionTestScene(Scene* scene);
+    
 private:
-    // Helper functions for common scene elements
-    static std::shared_ptr<Entity> CreateGroundPlane(
-        const glm::vec3& position = glm::vec3(0.0f, -1.0f, 0.0f),
-        const glm::vec3& scale = glm::vec3(10.0f, 0.1f, 10.0f),
-        const Material& material = Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.8f, 0.0f)
-    );
+    static void BuildCornellBoxHelper(Scene* scene, float box_size = 2.0f);
     
     static std::shared_ptr<Entity> CreateSphere(
         const glm::vec3& position,

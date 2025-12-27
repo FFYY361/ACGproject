@@ -7,6 +7,11 @@
 struct CameraObject {
     glm::mat4 screen_to_camera;
     glm::mat4 camera_to_world;
+    glm::mat4 camera_to_world_prev; // previous camera transform for motion blur
+    float shutterOpen;
+    float shutterClose;
+    float aperture;
+    float focusDist;
 };
 
 class Application {
@@ -66,6 +71,7 @@ private:
     glm::vec3 camera_front_;
     glm::vec3 camera_up_;
     float camera_speed_;
+    glm::mat4 last_camera_to_world_; // store previous camera transform for motion blur
 
 
     void OnMouseMove(double xpos, double ypos); // Mouse event handler
@@ -94,6 +100,16 @@ private:
     int selected_entity_id_; // -1 if no entity selected
     
     // Scene selection
+    
+    // Motion test / timing
+    std::chrono::steady_clock::time_point start_time_;
+    
+    // Camera motion blur / DOF parameters exposed to UI
+    float shutter_open_ = 0.0f;
+    float shutter_close_ = 0.02f;
+    float aperture_ = 0.0f; // lens radius
+    float focus_distance_ = 5.0f;
+    int samples_per_frame_ = 1; // number of per-frame dispatches to increase SPP
     int current_scene_index_; // Index of currently loaded scene
     int pending_scene_index_; // Pending scene switch request (-1 if none)
 };

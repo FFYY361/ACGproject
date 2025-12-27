@@ -50,7 +50,12 @@ public:
 
     // Setters
     void SetMaterial(const Material& material) { material_ = material; }
-    void SetTransform(const glm::mat4& transform) { transform_ = transform; }
+    void SetTransform(const glm::mat4& transform);
+    // Explicitly set previous transform (useful to create persistent motion blur)
+    void SetPreviousTransform(const glm::mat4& prev_transform);
+    // Set current transform without changing stored previous transform
+    void SetTransformNoPrev(const glm::mat4& transform);
+    const glm::mat4& GetPreviousTransform() const { return prev_transform_; }
 
     // Create BLAS for this entity's mesh
     void BuildBLAS(grassland::graphics::Core* core);
@@ -67,6 +72,7 @@ private:
     std::vector<SubMesh> submeshes_;  // Submesh definitions
     std::vector<uint32_t> material_ids_;  // Material ID per triangle (generated from submeshes)
     glm::mat4 transform_;
+    glm::mat4 prev_transform_; // previous transform for motion blur
 
     std::unique_ptr<grassland::graphics::Buffer> vertex_buffer_;
     std::unique_ptr<grassland::graphics::Buffer> index_buffer_;
