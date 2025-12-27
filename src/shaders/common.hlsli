@@ -25,13 +25,15 @@ struct LightInfo
 struct Material
 {
     float3 base_color;
+    float3 emission;
+    float3 alpha;
     float roughness;
     float metallic;
-    float transmission;  // 0 = opaque, 1 = fully transparent
-    float3 emission; // 后面做光源时会用到
-    float ior;           // Index of refraction
-    int texture_id;      // -1 = no texture, >= 0 = texture array index
-    int material_id;
+    float transmission; // 0 = opaque, 1 = fully transparent
+    float ior; // Index of refraction (e.g., 1.5 for glass)
+    int texture_id; // -1 = no texture, >= 0 = texture index
+    int normal_id;
+    int use_vertex_color; // 0 = use base_color/texture, 1 = use vertex colors
 };
 
 struct EntityInfo
@@ -41,6 +43,8 @@ struct EntityInfo
     uint vertexBufferOffset;
     uint indexBufferOffset;
     uint materialOffset;
+    uint materialIdBufferOffset;  // Offset into the material ID buffer
+    uint numMaterials;             // Number of materials for this entity
 };
 
 struct Vertex
@@ -60,6 +64,8 @@ struct TextureInfo
 struct RayPayload
 {
     bool hit; // 是否击中
+    bool isShadowRay; // 是否为阴影射线
+    float3 shadow; // 阴影衰减系数，若-1表示这不是阴影射线
     bool cal_emission; // 是否计算自发光
     uint instance_id; // 击中的物体ID
     
@@ -106,6 +112,7 @@ StructuredBuffer<Light> lights : register(t0, space12);
 Texture2D textures[] : register(t0, space13);  // Bindless texture array
 SamplerState textureSampler : register(s0, space14);
 StructuredBuffer<TextureInfo> texture_infos : register(t0, space15);
+StructuredBuffer<uint> material_ids : register(t0, space16);  // Per-triangle material IDs
 
 
 

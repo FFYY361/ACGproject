@@ -2,7 +2,7 @@
 // 1. 引入其他模块
 #include "common.hlsli"
 #include "random.hlsli"
-#include "bsdf.hlsl"
+#include "bsdf.hlsli"
 
 
 void GetLightInfo(
@@ -64,7 +64,7 @@ float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 norm
     // 4. 边界处理
     mip_level = clamp(mip_level, 0.0, (float) (numlevel - 1));
     text_idx += (int) mip_level;
-    tex = textures[NonUniformResourceIndex(text_idx)];
+    //tex = textures[NonUniformResourceIndex(text_idx)];
     //texture = textures[NonUniformResourceIndex(text_idx)];
     return tex.SampleLevel(textureSampler, uv, 0).rgb;
 }
@@ -131,7 +131,7 @@ float3 get_target_direction(float2 pixel_center)
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
-    for (int bounce = 0; bounce < 10; bounce++)
+    for (int bounce = 0; bounce < 8; bounce++)
     {
         
         payload.hit = false;
@@ -166,6 +166,7 @@ float3 get_target_direction(float2 pixel_center)
         uint n;
         
         // 发射光线
+        payload.isShadowRay = false;
         TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
         
         if (bounce == 0)
@@ -220,31 +221,25 @@ float3 get_target_direction(float2 pixel_center)
             //radiance = float3(0, 0, 0); // 遇到自发光直接结束
             break;
         }
-        
-        float3 directLightContrib = float3(0, 0, 0);
-        
-        // 透射材质也需要直接光照（用于表面反射部分）
-        // 遍历光源进行Next Event Estimation
+        // === Next Event Estimation (直接光照) ===
+        float3 directLightContrib = float3(0.0, 0.0, 0.0);
         for (int i = 0; i < lightinfo.num_light; ++i)
         {
             Light light = lights[i];
-            float3 L_dir;
-            float dist;
-            float3 L_intensity;
-            float light_pdf_solid = 1.0;
             
-            // --- 3.1 计算光源信息 ---
+            // 采样光源位置
             float3 light_pos = light.position;
-            if (light.type == 1)
+            if (light.type == 1) // 面光源
             {
-                // 面光源，随机采样光源表面位置
-                float r1 = next_rand(seed);
-                float r2 = next_rand(seed);
-                light_pos = light.position + light.u * (r1 - 0.5) + light.v * (r2 - 0.5);
+                light_pos += light.u * (next_rand(seed) - 0.5) + light.v * (next_rand(seed) - 0.5);
             }
+            
+            // 计算光源信息
+            float3 L_dir, L_intensity;
+            float dist, light_pdf_solid;
             GetLightInfo(light, P, light_pos, L_intensity, light_pdf_solid, L_dir, dist);
 
-            // --- 3.2 阴影射线 (Shadow Ray) ---
+            // 阴影射线测试
             RayDesc shadowRay;
             shadowRay.Origin = P + L_dir * 0.001;
             shadowRay.Direction = L_dir;
@@ -252,25 +247,30 @@ float3 get_target_direction(float2 pixel_center)
             shadowRay.TMax = dist - 0.1;
             RayPayload shadowPayload;
             shadowPayload.hit = true;
-            TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
+            shadowPayload.isShadowRay = true;
+            shadowPayload.shadow = 1.0f; // 初始光强为1.0
+            TraceRay(as, RAY_FLAG_NONE,
                  0xFF, 0, 1, 0, shadowRay, shadowPayload);
             
-            if (!shadowPayload.hit)
+            if (length(shadowPayload.shadow) > 0.001)
             {
                 // --- 3.3 计算 BSDF 贡献 ---
-                float NdotL = abs(dot(N, L_dir));
-                BSDFSample bsdf = EvalBSDF(V, L_dir, N, payload.material);
-                float mis_direct = 1.0;
+                float NdotL = dot(N, L_dir);
                 
-                if (bsdf.pdf > 0.0001)
-                    mis_direct = PowerHeuristic(light_pdf_solid, bsdf.pdf);
-                
-                directLightContrib += mis_direct * throughput * bsdf.bsdf * L_intensity * NdotL / light_pdf_solid;
-                //directLightContrib = bsdf.bsdf;
-                //directLightContrib = L_dir;
-                //directLightContrib = 1/bsdf.pdf;
-                //directLightContrib = bsdf.isTransmission ? float3(1.0, 0.0, 0.0) : float3(1.0, 1.0, 1.0);
-                //directLightContrib = bsdf.bsdf;
+                // 检查光线和法线是否在同一半球（透射材质不能通过 NEE 直接照明）
+                if (NdotL > 0.0)
+                {
+                    // 使用新接口评估 BSDF
+                    float3 bsdf_value;
+                    float bsdf_pdf;
+                    EvalBSDFForNEE(V, L_dir, N, payload.material, bsdf_value, bsdf_pdf);
+                    
+                    float mis_direct = 1.0;
+                    if (bsdf_pdf > 0.0001)
+                        mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
+                    
+                    directLightContrib += shadowPayload.shadow * mis_direct * throughput * bsdf_value * L_intensity * NdotL / light_pdf_solid;
+                }
             }
         }
         //if (bounce == 1)
@@ -319,12 +319,6 @@ float3 get_target_direction(float2 pixel_center)
         ray.Direction = next_dir;
         
         // 保存PDF用于MIS
-        /*
-        if (bsdf_sample.isTransmission)
-        {
-            last_brdf_pdf = 1.0; // 透射使用特殊标记
-        }
-        */
         last_bsdf_pdf = bsdf_sample.pdf;
         last_hit_pos = P;
         
@@ -335,7 +329,7 @@ float3 get_target_direction(float2 pixel_center)
 
         // --- 俄罗斯轮盘赌 (Russian Roulette) ---
         // 随着反弹次数增加，throughput 会变小。如果太小，就随机终止，避免浪费计算。
-        if (bounce > 2)
+        if (bounce > 4)
         {
             float p = max(throughput.x, max(throughput.y, throughput.z));
             if (next_rand(seed) > p)
@@ -372,21 +366,92 @@ float3 get_target_direction(float2 pixel_center)
     //  float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     //  payload.color = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
   
-    float3 topColor = float3(0.5, 0.5, 0.5);
-    float3 bottomColor = float3(0.5, 0.5, 0.5);
+    payload.hit = false;
+    if (payload.isShadowRay)
+        return; // 阴影射线不需要天空颜色
+    
+    
+    float3 topColor = float3(0.2, 0.2, 0.6);
+    float3 bottomColor = float3(0.1, 0.1, 0.4);
     float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
     Material mat;
     mat.base_color = lerp(bottomColor, topColor, t);
     payload.material = mat;
   
   
-    payload.hit = false;
     payload.instance_id = 0xFFFFFFFF; // Invalid ID for miss
+}
+
+[shader("anyhit")]
+void AnyHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    // 1. 获取当前点的 Alpha 值（示例暂用硬编码，之后需采样纹理）
+    // 假设 alpha = 0.0 是全透明，1.0 是全不透明
+    uint instance_idx = InstanceID();
+  
+  
+    // 取得三角形索引和顶点位置
+    uint prim = PrimitiveIndex();
+  
+    // 获取entity info来查找正确的材质
+    EntityInfo entity_info = entity_infos[instance_idx];
+    
+    // 计算该entity内部的三角形索引，然后加上materialIdBufferOffset得到全局索引
+    uint triangle_global_idx = entity_info.materialIdBufferOffset + prim;
+    uint material_id = material_ids[triangle_global_idx];
+    
+    // 加载该三角形的材质
+    Material mat = materials[material_id];
+    float3 alpha = mat.alpha;
+    // 2. 针对阴影射线 (Shadow Ray)
+    // 只有当你的渲染器逻辑里，用 payload.shadow 来标记剩余光强时才这样做
+    if (payload.isShadowRay)
+    {
+        // 核心逻辑：既然是半透明，光线必须“穿过去”才能计算后面的遮挡
+        payload.shadow *= (1.0f - alpha);
+
+        if (length(payload.shadow) < 0.001f)
+        {
+            // 如果光强已经衰减到几乎没有了，接受这次碰撞（停止搜索）
+            AcceptHitAndEndSearch();
+            return;
+        }
+        else
+        {
+            // 还有残余光强，忽略这次碰撞，让光线继续飞向下一个物体
+            IgnoreHit();
+            return;
+        }
+    }
+    else
+    {
+        // 3. 对于相机射线 (Primary Ray)
+        // 如果碰到全透明的地方，必须 IgnoreHit，否则你会看到一个黑色的几何体表面
+        if (max(alpha[0], max(alpha[1], alpha[2])) < 0.01f)
+        {
+            IgnoreHit();
+            return;
+        }
+        else
+        {
+            //AcceptHitAndEndSearch();
+            //IgnoreHit();
+            return;
+        }
+    }
 }
 
 [shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+    
+    
     payload.hit = true;
+    
+    if (payload.isShadowRay)
+    {
+        // 阴影射线只需要标记为击中，然后在 AnyHit 里处理透明度
+        return;
+    }
 
     // 获取实例/材质索引
     uint instance_idx = InstanceID();
@@ -398,19 +463,21 @@ float3 get_target_direction(float2 pixel_center)
   
     // 取得三角形索引和顶点位置
     uint prim = PrimitiveIndex();
-    // payload.instance_id = prim;
   
-    //printf("Hit triangle index: %d", prim, "\n");
-
-    // 加载材质
-    Material mat = materials[instance_idx];
+    // 获取entity info来查找正确的材质
+    EntityInfo entity_info = entity_infos[instance_idx];
+    
+    // 计算该entity内部的三角形索引，然后加上materialIdBufferOffset得到全局索引
+    uint triangle_global_idx = entity_info.materialIdBufferOffset + prim;
+    uint material_id = material_ids[triangle_global_idx];
+    
+    // 加载该三角形的材质
+    Material mat = materials[material_id];
 
     // ---------- 强制漫反射计算 ----------
     // 1. 获取世界空间法线
     float3 world_normal = normalize(float3(0, 0, 0)); // TODO: 替换为真实三角形法线
     
-    
-    EntityInfo entity_info = entity_infos[instance_idx];
     Vertex v0 = vertices[indices[entity_info.indexBufferOffset + prim * 3 + 0] + entity_info.vertexBufferOffset];
     Vertex v1 = vertices[indices[entity_info.indexBufferOffset + prim * 3 + 1] + entity_info.vertexBufferOffset];
     Vertex v2 = vertices[indices[entity_info.indexBufferOffset + prim * 3 + 2] + entity_info.vertexBufferOffset];
@@ -419,6 +486,7 @@ float3 get_target_direction(float2 pixel_center)
     
     // 插值UV坐标
     float2 uv = b.x * v0.uv + b.y * v1.uv + b.z * v2.uv;
+    uv = float2(uv.x, 1.0 - uv.y); // V坐标翻转以匹配纹理采样约定)
     // 光线微分
     float sign = (dot(WorldRayDirection(), world_normal)) > 0 ? 1.0 : -1.0;
     float3 dTdX = -(dot(world_normal, (payload.dPdX + RayTCurrent() * payload.dDdX))) / (dot(WorldRayDirection(), world_normal) + sign * EPS);
@@ -468,19 +536,30 @@ float3 get_target_direction(float2 pixel_center)
     
     
     float3 face_normal = float3(0, 0, 0);
-    if (mat.material_id >= 0)
+    if (mat.normal_id >= 0)
     {
-        float3 normal = MipMapSample(mat.material_id, uv, payload.width, WorldRayDirection(), world_normal, uv_scale);
+        float3 normal = MipMapSample(mat.normal_id, uv, payload.width, WorldRayDirection(), world_normal_, uv_scale);
         normal = normal * 2.0 - 1.0; // 从 [0,1] 映射到 [-1,1]
         //normal.y = -normal.y; // 纹理空间到对象空间的 Y 轴翻转
         face_normal = normalize(normal);
     }
+    else if (length(v0.normal) > 0.9 && length(v1.normal) > 0.9 && length(v2.normal) > 0.9)
+    {
+        // 使用插值后的顶点法线
+        face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
+    }
     else
     {
-        face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
+        face_normal = normalize(cross(v1.pos - v0.pos, v2.pos - v0.pos));
     }
     //face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
     world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
+    
+    // 确保法线朝向光线入射侧（对于透射材质很重要）
+    if (dot(world_normal, WorldRayDirection()) > 0.0)
+    {
+        world_normal = -world_normal;
+    }
   
     /*
     // 2. 平行光方向 (0, 0, -1)
@@ -506,10 +585,10 @@ float3 get_target_direction(float2 pixel_center)
     payload.position = world_pos;
     payload.normal = world_normal; // 确保法线归一化
     payload.debug = world_normal;
-    
     // 如果有纹理，使用纹理颜色；否则使用材质基础色
     if (mat.texture_id >= 0) {
         mat.base_color = MipMapSample(mat.texture_id, uv, payload.width, WorldRayDirection(), world_normal, uv_scale);
     }
+    
     payload.material = mat;
 }

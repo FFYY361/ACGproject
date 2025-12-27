@@ -30,6 +30,8 @@ public:
     
     // Build bedroom scene using bedroom mesh
     static void BuildBedroomScene(Scene* scene);
+
+    static void BuildBedroomSplitScene(Scene* scene);
     
     // Build the default demo scene
     static void BuildDefaultScene(Scene* scene);
@@ -55,6 +57,12 @@ private:
         const glm::vec3& position,
         const glm::vec3& scale = glm::vec3(1.0f),
         const Material& material = Material()
+    );
+    
+    // Helper to create an entity with multi-material support from OBJ+MTL
+    static std::shared_ptr<Entity> CreateMultiMaterialEntity(
+        const std::string& obj_path,
+        const glm::mat4& transform = glm::mat4(1.0f)
     );
     
     // Light creation helpers (returns Light struct, not Entity)

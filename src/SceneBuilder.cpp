@@ -1,6 +1,5 @@
 #include "SceneBuilder.h"
 #include "glm/gtc/matrix_transform.hpp"
-
 // ===== Helper Functions =====
 
 std::shared_ptr<Entity> SceneBuilder::CreateGroundPlane(
@@ -37,6 +36,13 @@ std::shared_ptr<Entity> SceneBuilder::CreateCube(
         material,
         glm::scale(glm::translate(glm::mat4(1.0f), position), scale)
     );
+}
+
+std::shared_ptr<Entity> SceneBuilder::CreateMultiMaterialEntity(
+    const std::string& obj_path,
+    const glm::mat4& transform
+) {
+    return std::make_shared<Entity>(obj_path, transform, true);
 }
 
 std::shared_ptr<Light> SceneBuilder::CreatePointLight(
@@ -803,42 +809,303 @@ void SceneBuilder::BuildProceduralScene(Scene* scene) {
 void SceneBuilder::BuildBedroomScene(Scene* scene) {
     scene->Clear();
     
-    // // === 加载bedroom纹理 ===
-    // int tex1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u1_v1.jpg");
-    // int tex2 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u1_v2.jpg");
-    // int tex3 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v1.jpg");
-    // int tex4 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v2.jpg");
-    // int tex5 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u2_v4.jpg");
-    // int tex6 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u3_v1.jpg");
-    // int tex7 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/iscv2_u4_v1.jpg");
-    
-    // === 加载bedroom模型 ===
-    // 主要的bedroom mesh
-    scene->AddEntity(std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/bedroom/iscv2.obj",
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f),
-        glm::scale(
-            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
-            glm::vec3(1.0f, 1.0f, 1.0f)
-        )
+    // Add area light for illumination
+    scene->AddLight(CreateAreaLight(
+        glm::vec3(0.0f, 3.0f, 0.0f),
+        glm::vec3(50.0f, 50.0f, 50.0f),
+        glm::vec3(2.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 2.0f)
     ));
     
-    // // === 添加一些装饰物体 ===
+    // Load bedroom with multi-material support (true = load materials from MTL)
+    auto bedroom = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/iscv2.obj",
+        glm::mat4(1.0f),
+        true  // Load materials from MTL file
+    );
+    scene->AddEntity(bedroom);
     
-    // // 镜面金属球（装饰品）
-    // scene->AddEntity(CreateSphere(
-    //     glm::vec3(1.5f, 0.5f, 1.0f),
-    //     0.3f,
-    //     Material(glm::vec3(0.95f, 0.95f, 0.95f), 0.05f, 1.0f)
-    // ));
-    
-    // // 玻璃球（装饰品）
-    // scene->AddEntity(CreateSphere(
-    //     glm::vec3(-1.5f, 0.5f, 1.0f),
-    //     0.3f,
-    //     Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, 1.5f)
-    // ));
+    grassland::LogInfo("Bedroom loaded with {} materials and {} submeshes",
+                       bedroom->GetMaterials().size(),
+                       bedroom->GetSubMeshes().size());
     
     scene->BuildAccelerationStructures();
 }
 
+void SceneBuilder::BuildBedroomSplitScene(Scene* scene) {
+    scene->Clear();
+
+    glm::mat4 M(1.0f);
+
+    // 旋转部分
+    M[0] = glm::vec4(-1, 0, 0, 0);  // x -> -x'
+    M[1] = glm::vec4(0, 0, 1, 0);  // y ->  z'
+    M[2] = glm::vec4(0, 1, 0, 0);  // z ->  y'
+
+    // 平移：沿 y' 轴 5 个单位（即世界 z 方向）
+	glm::vec3 translate = glm::vec3(-20, -35, -10);
+    M[3] = glm::vec4(translate, 1);
+
+
+    scene->AddLight(CreateAreaLight(
+        glm::vec3(1.0f, 35.0f, -10.0f) + translate,
+        glm::vec3(20000.0f, 20000.0f, 20000.0f),
+        glm::vec3(0.5, 0.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 0.5f)
+    ));
+    //glm::vec4 pos = M * glm::vec4(glm::vec3(11.2f, 20.0f, 32.7f), 1.0f);
+    glm::vec4 pos = M * glm::vec4(glm::vec3(33.0f, 16.0f, 28.0f), 1.0f);
+    glm::vec3 point_light = glm::vec3(pos[0], pos[1], pos[2]);
+    scene->AddLight(CreatePointLight(
+        point_light,
+        glm::vec3(4000.0f, 4000.0f, 4000.0f)
+	));
+    
+	int texture_u1_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u1_v1.jpg");
+    //int normal_u1_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u1_v1_normal.png");
+	grassland::LogInfo("Loaded bedroom u1_v1 texture with ID {}", texture_u1_v1);
+    Material mat_u1_v1(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        texture_u1_v1,
+        -1
+	);
+    auto bedroom_u1_v1 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u1_v1.obj",
+        mat_u1_v1,
+        M
+	);
+	scene->AddEntity(bedroom_u1_v1); 
+    int texture_u1_v2 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u1_v2.jpg");
+    grassland::LogInfo("Loaded bedroom u1_v2 texture with ID {}", texture_u1_v2);
+    Material mat_u1_v2(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        texture_u1_v2,
+        -1
+    );
+    auto bedroom_u1_v2 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u1_v2.obj",
+        mat_u1_v2,
+        M
+    );
+    scene->AddEntity(bedroom_u1_v2);
+	int texture_u2_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u2_v1.jpg");
+	grassland::LogInfo("Loaded bedroom u2_v1 texture with ID {}", texture_u2_v1);
+    Material mat_u2_v1(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        texture_u2_v1,
+		-1
+	);
+    auto bedroom_u2_v1 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u2_v1.obj",
+        mat_u2_v1,
+		M
+	);
+	scene->AddEntity(bedroom_u2_v1);
+	int texture_u2_v2 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u2_v2.jpg");
+	grassland::LogInfo("Loaded bedroom u2_v2 texture with ID {}", texture_u2_v2);
+    Material mat_u2_v2(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+		texture_u2_v2,
+		-1
+	);
+    auto bedroom_u2_v2 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u2_v2.obj",
+		mat_u2_v2,
+		M
+	);
+    scene->AddEntity(bedroom_u2_v2);
+    int texture_u2_v4 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u2_v4.jpg");
+    grassland::LogInfo("Loaded bedroom u2_v4 texture with ID {}", texture_u2_v4);
+    Material mat_u2_v4(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        texture_u2_v4,
+        -1,
+		glm::vec3(0.5f, 0.5f, 0.5f)
+    );
+    auto bedroom_u2_v4 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u2_v4.obj",
+        mat_u2_v4,
+        M
+    );
+    scene->AddEntity(bedroom_u2_v4);
+	int texture_u3_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u3_v1.jpg");
+	grassland::LogInfo("Loaded bedroom u3_v1 texture with ID {}", texture_u3_v1);
+    Material mat_u3_v1(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+		texture_u3_v1,
+		-1
+	);
+    auto bedroom_u3_v1 = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u3_v1.obj",
+		mat_u3_v1,
+		M
+	);
+	scene->AddEntity(bedroom_u3_v1);
+	int texture_u4_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u4_v1.jpg");
+	grassland::LogInfo("Loaded bedroom u4_v1 texture with ID {}", texture_u4_v1);
+    Material mat_u4_v1(
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        1.0f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+		1.5f,
+		texture_u4_v1,
+		-1
+	);
+    auto bedroom_u4_v1 = std::make_shared<Entity>(
+		PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_iscv2_Material_u4_v1.obj",
+		mat_u4_v1,
+		M
+	);
+	scene->AddEntity(bedroom_u4_v1);
+
+    //scene->Clear();
+    Material mirror_mat(
+        glm::vec3(0.99f, 0.99f, 0.99f),
+        0.01f,
+        1.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        -1,
+        -1
+    );
+
+    // 1. 定义平移矩阵 T
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), glm::vec3(26.65f, -32.55f, 27.9f));
+
+    // 2. 定义缩放矩阵 S
+    glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(7.85f, 0.1f, 10.7f));
+
+    // 3. 按照 S * M * T 的顺序相乘
+    // 注意：C++ 中矩阵乘法是从左到右结合的，但逻辑是从右向左应用到顶点
+    glm::mat4 M_mirror = M * T * S;
+
+    auto M2 = M * T;
+    grassland::LogInfo("M2 = [{}, {}, {}, {} | {}, {}, {}, {} | {}, {}, {}, {} | {}, {}, {}, {}]",
+        M2[0][0], M2[1][0], M2[2][0], M2[3][0],
+        M2[0][1], M2[1][1], M2[2][1], M2[3][1],
+        M2[0][2], M2[1][2], M2[2][2], M2[3][2],
+        M2[0][3], M2[1][3], M2[2][3], M2[3][3]);
+    auto mirror = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/cube.obj",
+        mirror_mat,
+        M_mirror
+	);
+	scene->AddEntity(mirror);
+
+	int normal_sphere = scene->AddTexture(PROJECT_DIR "/meshes/sphere_normal.png");
+    Material metalball_mat(
+        glm::vec3(0.99f, 0.99f, 0.99f),
+        0.2f,
+        0.8f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        -1,
+        normal_sphere
+    );
+	T = glm::translate(glm::mat4(1.0f), glm::vec3(24.0f, 0.0f, 3.25f));
+	S = glm::scale(glm::mat4(1.0f), glm::vec3(3.0f, 3.0f, 3.0f));
+	glm::mat4 M_metalball = M * T * S;
+    auto metalball = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/sphere.obj",
+        metalball_mat,
+		M_metalball
+	);
+    scene->AddEntity(metalball);
+
+    Material transball_mat(
+        glm::vec3(0.99f, 0.99f, 0.99f),
+        0.2f,
+        0.1f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        1.0f,
+        1.5f,
+        -1,
+        -1
+    );
+    T = glm::translate(glm::mat4(1.0f), glm::vec3(17.0f, 2.0f, 3.25f));
+    S = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 5.0f, 5.0f));
+    glm::mat4 M_transball = M * T * S;
+    auto transball = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/cube.obj",
+        transball_mat,
+        M_transball
+    );
+    scene->AddEntity(transball);
+
+    Material glass_mat(
+        glm::vec3(0.99f, 0.99f, 0.99f),
+        0.01f,
+        0.35f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.9f,
+        1.5f,
+        -1,
+        -1
+	);
+	T = glm::translate(glm::mat4(1.0f), glm::vec3(49.55f, -21.25f, 15.42f));
+	S = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f, 4.05f, 12.85f));
+	glm::mat4 M_glass = M * T * S;
+    auto glass = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/cube.obj",
+		glass_mat,
+		M_glass
+	);
+	scene->AddEntity(glass);
+
+    Material triangle_mat(
+        glm::vec3(0.9f, 0.9f, 0.9f),
+        0.8f,
+        0.0f,
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        0.0f,
+        1.5f,
+        -1,
+        -1,
+        glm::vec3(0.2f, 0.2f, 0.2f)
+    );
+    T = glm::translate(glm::mat4(1.0f), glm::vec3(30.0f, 20.0f, 15.0f));
+    S = glm::scale(glm::mat4(1.0f), glm::vec3(8.0f, 8.0f, 8.0f));
+	glm::mat4 M_triangle = M * T * S;
+    auto triangle = std::make_shared<Entity>(
+        PROJECT_DIR "/meshes/triangle.obj",
+        triangle_mat,
+        M_triangle
+	);
+	scene->AddEntity(triangle);
+
+    scene->BuildAccelerationStructures();
+}

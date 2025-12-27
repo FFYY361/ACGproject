@@ -8,6 +8,7 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#include "grassland/graphics/backend/d3d12/d3d12_program.h"
 
 #include <chrono>
 #include <iomanip>
@@ -225,13 +226,14 @@ void Application::OnInit() {
 
     // Build the scene using SceneBuilder
     // You can switch between different scenes by changing the function call:
-    // SceneBuilder::BuildDefaultScene(scene_.get());
+    //SceneBuilder::BuildBedroomScene(scene_.get());
+    SceneBuilder::BuildBedroomSplitScene(scene_.get());
     // SceneBuilder::BuildCornellBox(scene_.get());
     // SceneBuilder::BuildTestScene(scene_.get());
     // SceneBuilder::BuildMaterialShowcase(scene_.get());
     // SceneBuilder::BuildMyCustomScene(scene_.get());
     
-    SceneBuilder::BuildDefaultScene(scene_.get());
+    //SceneBuilder::BuildDefaultScene(scene_.get());
 
     // Create film for accumulation
     film_ = std::make_unique<Film>(core_.get(), window_->GetWidth(), window_->GetHeight());
@@ -288,9 +290,23 @@ void Application::OnInit() {
     core_->CreateShader(shader_vfs, "shader.hlsl", "RayGenMain", "lib_6_3", &raygen_shader_);
     core_->CreateShader(shader_vfs, "shader.hlsl", "MissMain", "lib_6_3", &miss_shader_);
     core_->CreateShader(shader_vfs, "shader.hlsl", "ClosestHitMain", "lib_6_3", &closest_hit_shader_);
+	core_->CreateShader(shader_vfs, "shader.hlsl", "AnyHitMain", "lib_6_3", &any_hit_shader_);
     grassland::LogInfo("Shader compiled successfully");
 
-    core_->CreateRayTracingProgram(raygen_shader_.get(), miss_shader_.get(), closest_hit_shader_.get(), &program_);
+    //core_->CreateRayTracingProgram(raygen_shader_.get(), miss_shader_.get(), closest_hit_shader_.get(), &program_);
+	int ret = core_->CreateRayTracingProgram(&program_);
+    program_->AddRayGenShader(raygen_shader_.get());
+    program_->AddMissShader(miss_shader_.get());
+
+    program_->AddHitGroup({
+        closest_hit_shader_.get(),
+        any_hit_shader_.get(),   // ⭐ Alpha shadow 关键
+        nullptr,
+        false
+        });
+
+
+
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_ACCELERATION_STRUCTURE, 1);  // space0
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_WRITABLE_IMAGE, 1);          // space1 - color output
 	program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space2 - camera
@@ -307,6 +323,7 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, scene_->GetTextureCount());              // space13 - texture array (bind)
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_SAMPLER, 1);                // space14 - texture sampler
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space15 - textureinfo
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space16 - material IDs
     //program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
     program_->Finalize();
 }
@@ -317,6 +334,7 @@ void Application::OnClose() {
     raygen_shader_.reset();
     miss_shader_.reset();
     closest_hit_shader_.reset();
+	any_hit_shader_.reset();
 
     scene_.reset();
     film_.reset();
@@ -332,6 +350,9 @@ void Application::OnClose() {
 }
 
 void Application::UpdateHoveredEntity() {
+    hovered_entity_id_ = -1;
+    hovered_pixel_color_ = glm::vec4(0.0f);
+    return;
     // Only detect hover when camera is disabled (cursor visible)
     if (camera_enabled_) {
         hovered_entity_id_ = -1;
@@ -394,7 +415,7 @@ void Application::OnUpdate() {
         if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
             const char* scene_names[] = {
                 "Default Scene", "Cornell Box", "Cornell Box 2", "Glass Test",
-                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene"
+                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene", "Bedroom split"
             };
             
             grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
@@ -412,6 +433,7 @@ void Application::OnUpdate() {
                 case 6: SceneBuilder::BuildCornellBox4(scene_.get()); break;
                 case 7: SceneBuilder::BuildProceduralScene(scene_.get()); break;
                 case 8: SceneBuilder::BuildBedroomScene(scene_.get()); break;
+                case 9: SceneBuilder::BuildBedroomSplitScene(scene_.get()); break;
             }
             
             // Wait for scene rebuild to complete
@@ -429,6 +451,19 @@ void Application::OnUpdate() {
             pending_scene_index_ = -1;
             
             grassland::LogInfo("Scene switch completed successfully");
+
+            
+            camera_pos_ = glm::vec3{ 0.0f, 1.0f, 5.0f };
+            camera_up_ = glm::vec3{ 0.0f, 1.0f, 0.0f }; // World up
+            camera_speed_ = 0.01f;
+            yaw_ = -90.0f; // Point down -Z
+            pitch_ = 0.0f;
+            glm::vec3 front;
+            front.x = cos(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+            front.y = sin(glm::radians(pitch_));
+            front.z = sin(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+            camera_front_ = glm::normalize(front);
+            // Update the camera buffer with new position/orientation
         }
         
         // Process keyboard input to move camera
@@ -455,7 +490,6 @@ void Application::OnUpdate() {
         hover_info.hovered_entity_id = hovered_entity_id_;
         hover_info_buffer_->UploadData(&hover_info, sizeof(HoverInfo));
 
-        // Update the camera buffer with new position/orientation
         CameraObject camera_object{};
         camera_object.screen_to_camera = glm::inverse(
             glm::perspective(glm::radians(60.0f), (float)window_->GetWidth() / (float)window_->GetHeight(), 0.1f, 10.0f));
@@ -826,7 +860,8 @@ void Application::RenderSceneSelector() {
         "Cornell Box 3",
         "Cornell Box 4",
         "Procedural Scene",
-        "Bedroom Scene"
+        "Bedroom Scene",
+        "Bedroom Split"
     };
     
     ImGui::Text("Select Scene:");
@@ -873,6 +908,7 @@ void Application::OnRender() {
 	command_context->CmdBindResources(11,{ scene_->GetLightInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(12,{ scene_->GetLightsBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
     command_context->CmdBindResources(15,{ scene_->GetTextureInfoBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	command_context->CmdBindResources(16,{ scene_->GetMaterialIdBuffer() }, grassland::graphics::BIND_POINT_RAYTRACING);
 	
 	// Bind textures (space13 for texture array, space14 for sampler)
 	// Note: Scene ensures at least one dummy texture exists

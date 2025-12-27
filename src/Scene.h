@@ -11,6 +11,8 @@ struct EntityInfo {
     uint32_t vertexBufferOffset;
     uint32_t indexBufferOffset;
     uint32_t materialOffset;
+    uint32_t materialIdBufferOffset;  // Offset into the material ID buffer
+    uint32_t numMaterials;             // Number of materials for this entity
 };
 
 struct TextureInfo {
@@ -80,6 +82,7 @@ public:
 	grassland::graphics::Buffer* GetLightsBuffer() const { return lights_buffer_.get(); }
 	grassland::graphics::Buffer* GetLightInfoBuffer() const { return light_info_buffer_.get(); }
 	grassland::graphics::Buffer* GetTextureInfoBuffer() const { return texture_info_buffer_.get(); }
+	grassland::graphics::Buffer* GetMaterialIdBuffer() const { return material_id_buffer_.get(); }
 
     // Get all entities
     const std::vector<std::shared_ptr<Entity>>& GetEntities() const { return entities_; }
@@ -102,6 +105,7 @@ private:
     std::unique_ptr<grassland::graphics::Buffer> entity_info_buffer_;
 	std::unique_ptr<grassland::graphics::Buffer> light_info_buffer_;
 	std::unique_ptr<grassland::graphics::Buffer> lights_buffer_;
+	std::unique_ptr<grassland::graphics::Buffer> material_id_buffer_;  // Per-triangle material IDs
     
     // Texture management
     std::vector<std::unique_ptr<grassland::graphics::Image>> textures_;
