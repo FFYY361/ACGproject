@@ -53,6 +53,26 @@ float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 norm
     return texture.SampleLevel(textureSampler, uv, 0).rgb;
 }
 
+// float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 normal)
+// {
+//     int base_idx = texture_infos[idx].idx; // index of mip level 0 in textures_ array
+//     // Query base level dimensions
+//     uint twidth, theight, numlevel;
+//     textures[NonUniformResourceIndex(base_idx)].GetDimensions(0, twidth, theight, numlevel);
+//     uint resolution = max(twidth, theight);
+//     float area_uv = 1.0; // 假设整个纹理覆盖面积为1
+//     float area_pos = width * width; // 近似为正方形区域
+//     // float area_uv = 1.0; // assume whole texture covers area 1
+//     // float area_pos = max(width * width, 1e-6); // avoid div by zero
+//     float texel_size = sqrt(area_uv / area_pos);
+//     float mip_level = log2(max(1.0, (float)resolution * texel_size)) - log2(abs(dot(ray_dir, normal)) + EPS);
+//     mip_level = clamp(mip_level, 0.0, (float) (texture_infos[idx].mipLevels - 1));
+//     int mip = (int) floor(mip_level + 0.5);
+//     int final_idx = base_idx + mip;
+//     Texture2D texture = textures[NonUniformResourceIndex(final_idx)];
+//     return texture.SampleLevel(textureSampler, uv, 0).rgb;
+// }
+
 
 float3 get_target_direction(float2 pixel_center)
 {
@@ -88,17 +108,63 @@ float3 get_target_direction(float2 pixel_center)
     float2 d = uv * 2.0 - 1.0;
     */
     
-    // 3. 生成初始光线
-    float4 origin = mul(camera_info.camera_to_world, float4(0, 0, 0, 1));
+    // 3. 采样光线时间（用于 motion blur）并插值相机变换
+    float time = lerp(camera_info.shutterOpen, camera_info.shutterClose, next_rand(seed));
+    float alpha = 0.0;
+    if (abs(camera_info.shutterClose - camera_info.shutterOpen) > 1e-6)
+        alpha = (time - camera_info.shutterOpen) / (camera_info.shutterClose - camera_info.shutterOpen);
+    float4x4 cam_to_world_t = lerp(camera_info.camera_to_world_prev, camera_info.camera_to_world, alpha);
+
+    // 4. 生成初始光线（使用插值后的相机变换）
+    float3 cam_origin = mul(cam_to_world_t, float4(0, 0, 0, 1)).xyz;
     float4 target = mul(camera_info.screen_to_camera, float4(d, 1, 1));
-    float4 direction = mul(camera_info.camera_to_world, float4(target.xyz, 0));
+    float3 pinhole_dir = normalize(mul(cam_to_world_t, float4(target.xyz, 0)).xyz);
+
+    // Thin-lens DOF: sample lens if aperture > 0
+    float aperture = camera_info.aperture;
+    float focusDist = camera_info.focusDist;
+    float3 cam_right = mul(cam_to_world_t, float4(1, 0, 0, 0)).xyz;
+    float3 cam_up = mul(cam_to_world_t, float4(0, 1, 0, 0)).xyz;
+
+    float3 origin;
+    float3 direction_world;
+    if (aperture > 1e-6) {
+        // Focus point on focal plane
+        float3 p_focus = cam_origin + pinhole_dir * focusDist;
+        // Sample disk using concentric mapping
+        float u1 = next_rand(seed);
+        float u2 = next_rand(seed);
+        float2 u = 2.0 * float2(u1, u2) - 1.0;
+        float2 disk;
+        if (u.x == 0 && u.y == 0) {
+            disk = float2(0,0);
+        } else {
+            float2 d;
+            float r, theta;
+            if (abs(u.x) > abs(u.y)) {
+                r = u.x;
+                theta = (PI/4.0) * (u.y / u.x);
+            } else {
+                r = u.y;
+                theta = (PI/2.0) - (PI/4.0) * (u.x / u.y);
+            }
+            d = r * float2(cos(theta), sin(theta));
+            disk = d;
+        }
+        float3 lens_offset = cam_right * (disk.x * aperture) + cam_up * (disk.y * aperture);
+        origin = cam_origin + lens_offset;
+        direction_world = normalize(p_focus - origin);
+    } else {
+        origin = cam_origin;
+        direction_world = pinhole_dir;
+    }
 
     float t_min = 0.001;
     float t_max = 10000.0;
     
     RayDesc ray;
-    ray.Origin = origin.xyz;
-    ray.Direction = normalize(direction.xyz);
+    ray.Origin = origin;
+    ray.Direction = normalize(direction_world);
     ray.TMin = t_min;
     ray.TMax = t_max;
     
@@ -112,6 +178,7 @@ float3 get_target_direction(float2 pixel_center)
     RayPayload payload;
     payload.instance_id = -1; // 初始为无效 ID
     payload.cal_emission = true;
+    payload.time = time;
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
@@ -232,6 +299,7 @@ float3 get_target_direction(float2 pixel_center)
             shadowRay.TMin = 0.001;
             shadowRay.TMax = dist - 0.1;
             RayPayload shadowPayload;
+            shadowPayload.time = payload.time;
             shadowPayload.hit = true;
             TraceRay(as, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
                  0xFF, 0, 1, 0, shadowRay, shadowPayload);
@@ -379,6 +447,13 @@ float3 get_target_direction(float2 pixel_center)
   
     // 获取entity info来查找正确的材质
     EntityInfo entity_info = entity_infos[instance_idx];
+    // Interpolate instance transform based on ray time for motion blur
+    float alpha_inst = 0.0;
+    if (abs(camera_info.shutterClose - camera_info.shutterOpen) > 1e-6)
+        alpha_inst = (payload.time - camera_info.shutterOpen) / (camera_info.shutterClose - camera_info.shutterOpen);
+    alpha_inst = clamp(alpha_inst, 0.0, 1.0);
+    float4x4 objectToWorld_t = lerp(entity_info.objectToWorldPrev, entity_info.objectToWorld, alpha_inst);
+    float4x4 worldToObject_t = lerp(entity_info.worldToObjectPrev, entity_info.worldToObject, alpha_inst);
     
     // 计算该entity内部的三角形索引，然后加上materialIdBufferOffset得到全局索引
     uint triangle_global_idx = entity_info.materialIdBufferOffset + prim;
@@ -438,7 +513,7 @@ float3 get_target_direction(float2 pixel_center)
     */
     
     float3 face_normal_ = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
-    float3 world_normal_ = normalize(mul((float3x3) entity_info.objectToWorld, face_normal_));
+    float3 world_normal_ = normalize(mul((float3x3) objectToWorld_t, face_normal_));
     
     
     float3 face_normal = float3(0, 0, 0);
@@ -454,7 +529,7 @@ float3 get_target_direction(float2 pixel_center)
         face_normal = normalize(b.x * v0.normal + b.y * v1.normal + b.z * v2.normal);
     }
     
-    world_normal = normalize(mul((float3x3) entity_info.objectToWorld, face_normal));
+    world_normal = normalize(mul((float3x3) objectToWorld_t, face_normal));
     
     // 确保法线朝向光线入射侧（对于透射材质很重要）
     if (dot(world_normal, WorldRayDirection()) > 0.0)

@@ -1,20 +1,8 @@
 #include "SceneBuilder.h"
+#include "Scene.h"
 #include "glm/gtc/matrix_transform.hpp"
 
 // ===== Helper Functions =====
-
-std::shared_ptr<Entity> SceneBuilder::CreateGroundPlane(
-    const glm::vec3& position,
-    const glm::vec3& scale,
-    const Material& material
-) {
-    return std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/cube.obj",
-        material,
-        glm::scale(glm::translate(glm::mat4(1.0f), position), scale)
-    );
-}
-
 std::shared_ptr<Entity> SceneBuilder::CreateSphere(
     const glm::vec3& position,
     float radius,
@@ -76,68 +64,45 @@ std::shared_ptr<Light> SceneBuilder::CreateAreaLight(
 
 // ===== Pre-defined Scenes =====
 
+void SceneBuilder::BuildCornellBoxHelper(Scene* scene, float box_size) {
+    float wall_thickness = 0.01f;
+    // Floor (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, -box_size, 0.0f),
+        glm::vec3(box_size, wall_thickness, box_size),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
+    ));
+    
+    // Ceiling (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, box_size, 0.0f),
+        glm::vec3(box_size, wall_thickness, box_size),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
+    ));
+    
+    // Back wall (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, 0.0f, -box_size),
+        glm::vec3(box_size, box_size, wall_thickness),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
+    ));
+    
+    // Left wall (red)
+    scene->AddEntity(CreateCube(
+        glm::vec3(-box_size, 0.0f, 0.0f),
+        glm::vec3(wall_thickness, box_size, box_size),
+        Material(glm::vec3(0.9f, 0.1f, 0.1f), 0.9f, 0.0f)
+    ));
+    
+    // Right wall (green)
+    scene->AddEntity(CreateCube(
+        glm::vec3(box_size, 0.0f, 0.0f),
+        glm::vec3(wall_thickness, box_size, box_size),
+        Material(glm::vec3(0.1f, 0.9f, 0.1f), 0.9f, 0.0f)
+    ));
+}
+
 void SceneBuilder::BuildDefaultScene(Scene* scene) {
-    scene->Clear();
-
-    // Light source - a small emissive cube above the scene
-    //auto light1 = std::make_shared<Light>(
-    //    0,
-    //    glm::vec3(1.5f, 3.0f, 2.0f),
-    //    glm::vec3(50.0f, 50.0f, 50.0f)
-    //);
-    //auto light1 = std::make_shared<Light>(
-    //    0,
-    //    glm::vec3(0.0f, 5.0f, -1.1f),
-    //    glm::vec3(15.0f, 15.0f, 15.0f)
-    //);
-    //scene->AddLight(light1);
-    /*auto light2 = std::make_shared<Light>(
-        0,
-        glm::vec3(1.5f, 0.5f, -2.0f),
-        glm::vec3(20.0f, 20.0f, 20.0f)
-    );*/
-    //scene->AddLight(light2);
-
-    //auto light = std::make_shared<Light>(
-    //    1,
-    //    glm::vec3(0.0f, 2.0f, -1.5f),
-    //    glm::vec3(15.0f, 15.0f, 15.0f),
-    //    glm::vec3(0.0f, 0.0f, -1.0f),
-    //    glm::vec3(1.0f, 0.0f, 0.0f),
-    //    1.0f
-    //);
-    //scene->AddLight(light);
-
-
-    // Ground plane
-    //scene->AddEntity(CreateGroundPlane());
-    
-    // Yellow sphere
-    //scene->AddEntity(CreateSphere(
-    //    glm::vec3(0.0f, 0.5f, -2.0f),
-    //    0.5f,
-    //    Material(glm::vec3(1.0f, 1.0f, 0.0f), 1.0f, 0.0f)
-    //));
-
-    //// Metallic white sphere
-    //scene->AddEntity(CreateSphere(
-    //    glm::vec3(2.0f, 0.5f, 0.0f),
-    //    0.5f,
-    //    Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.2f, 1.0f, glm::vec3(0.0f), 0.0f, 1.1f)
-    //));
-    
-    //// Blue cube
-  //  scene->AddEntity(CreateCube(
-  //      glm::vec3(0.0f, 0.5f, 0.0f),
-		//glm::vec3(1.0f, 1.0f, 1.0f),
-  //      Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.5f, 0.3f, glm::vec3(0.0f), 0.95f, 1.01f)
-  //  ));
-
-  //  
-  //  scene->BuildAccelerationStructures();
-
-
-
     scene->Clear();
 
     float box_size = 1.5f;
@@ -161,7 +126,7 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     scene->AddLight(light1);
     */
     //Floor (white)
-    scene->AddEntity(CreateGroundPlane(
+    scene->AddEntity(CreateCube(
         glm::vec3(0.0f, -box_size, 0.0f),
         glm::vec3(box_size, 0.01f, box_size),
         Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
@@ -241,8 +206,9 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
 void SceneBuilder::BuildCornellBox(Scene* scene) {
     scene->Clear();
     
-    float box_size = 2.0f;
-    float wall_thickness = 0.1f;
+    float box_size = 1.5f;
+
+    BuildCornellBoxHelper(scene, box_size);
 
     // Point light in the top corner
     auto light = std::make_shared<Light>(
@@ -251,41 +217,6 @@ void SceneBuilder::BuildCornellBox(Scene* scene) {
         glm::vec3(10.0f, 10.0f, 10.0f)
     );
     scene->AddLight(light);
-
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, wall_thickness),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.9f, 0.1f, 0.1f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (green)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.1f, 0.9f, 0.1f), 0.9f, 0.0f)
-    ));
     
     // Tall box (white)
     scene->AddEntity(CreateCube(
@@ -316,7 +247,6 @@ void SceneBuilder::BuildCornellBox2(Scene* scene) {
     scene->Clear();
     
     float box_size = 2.0f;
-    float wall_thickness = 0.1f;
 
     // Circular disk area light on ceiling (using small square approximation)
     float disk_radius = 0.8f;  // 增大光源尺寸
@@ -327,40 +257,7 @@ void SceneBuilder::BuildCornellBox2(Scene* scene) {
         glm::vec3(0.0f, 0.0f, disk_radius)   // v vector (z direction)
     ));
 
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, wall_thickness),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.9f, 0.1f, 0.1f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (green)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.1f, 0.9f, 0.1f), 0.9f, 0.0f)
-    ));
+    BuildCornellBoxHelper(scene, box_size);
     
     // Metallic sphere (left side)
     scene->AddEntity(CreateSphere(
@@ -383,7 +280,6 @@ void SceneBuilder::BuildCornellBoxMesh(Scene* scene) {
     scene->Clear();
     
     float box_size = 2.0f;
-    float wall_thickness = 0.1f;
 
     // 大圆盘面光源在天花板上
     float disk_radius = 0.6f;
@@ -394,40 +290,7 @@ void SceneBuilder::BuildCornellBoxMesh(Scene* scene) {
         glm::vec3(0.0f, 0.0f, disk_radius)
     ));
 
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, wall_thickness),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.75f, 0.25f, 0.25f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (blue)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(wall_thickness, box_size, box_size),
-        Material(glm::vec3(0.25f, 0.25f, 0.75f), 0.9f, 0.0f)
-    ));
+    BuildCornellBoxHelper(scene, box_size);
     
     // 金属立方体 (使用cube.obj)
     scene->AddEntity(CreateCube(
@@ -446,47 +309,37 @@ void SceneBuilder::BuildCornellBoxMesh(Scene* scene) {
     scene->BuildAccelerationStructures();
 }
 
+void SceneBuilder::BuildMotionTestScene(Scene* scene) {
+    scene->Clear();
+
+    // Ground
+    scene->AddEntity(CreateCube(glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(10.0f, 0.1f, 10.0f),
+        Material(glm::vec3(0.8f), 0.9f, 0.0f)));
+
+    // Static box as reference
+    scene->AddEntity(CreateCube(glm::vec3(-1.5f, -0.5f, -2.0f), glm::vec3(1.0f, 1.0f, 1.0f),
+        Material(glm::vec3(0.7f,0.2f,0.2f), 0.8f, 0.0f)));
+
+    // Moving sphere (will be animated in Application::OnUpdate when this scene is active)
+    scene->AddEntity(CreateSphere(glm::vec3(0.0f, -0.5f, -2.0f), 0.5f,
+        Material(glm::vec3(0.2f,0.7f,0.9f), 0.3f, 0.0f)));
+
+    // Moving cube
+    scene->AddEntity(CreateCube(glm::vec3(1.5f, -0.5f, -2.0f), glm::vec3(0.8f),
+        Material(glm::vec3(0.9f,0.9f,0.2f), 0.6f, 0.0f)));
+
+    // Add a small point light for visibility
+    auto light = CreatePointLight(glm::vec3(0.0f, 3.0f, 0.0f), glm::vec3(25.0f));
+    scene->AddLight(light);
+
+    scene->BuildAccelerationStructures();
+}
+
 void SceneBuilder::BuildCornellBox3(Scene* scene) {
     scene->Clear();
     
     float box_size = 2.0f;
-    
-    // === Cornell Box 标准6面墙 ===
-    
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, 0.01f),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.75f, 0.25f, 0.25f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (blue)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.25f, 0.25f, 0.75f), 0.9f, 0.0f)
-    ));
+    BuildCornellBoxHelper(scene, box_size);
     
     // === 顶部面光源 ===
     float light_size = 0.7f;
@@ -529,43 +382,7 @@ void SceneBuilder::BuildCornellBox4(Scene* scene) {
     scene->Clear();
     
     float box_size = 1.5f;
-    
-    // === Cornell Box 标准6面墙（与Box3相同） ===
-    
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, 0.01f),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.75f, 0.25f, 0.25f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (blue)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.25f, 0.25f, 0.75f), 0.9f, 0.0f)
-    ));
+    BuildCornellBoxHelper(scene, box_size);
     
     // === 顶部面光源 ===
     float light_size = 0.7f;
@@ -604,7 +421,7 @@ void SceneBuilder::BuildGlassTestScene(Scene* scene) {
     scene->Clear();
     
     // Ground plane
-    scene->AddEntity(CreateGroundPlane(
+    scene->AddEntity(CreateCube(
         glm::vec3(0.0f, -1.0f, 0.0f),
         glm::vec3(10.0f, 0.1f, 10.0f),
         Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.8f, 0.0f)
@@ -662,7 +479,11 @@ void SceneBuilder::BuildMaterialShowcase(Scene* scene) {
     scene->Clear();
     
     // Ground
-    scene->AddEntity(CreateGroundPlane());
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, -0.5f, 0.0f),
+        glm::vec3(10.0f, 0.1f, 10.0f),
+        Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.9f, 0.0f)
+    ));
     
     // Back row: Roughness test (0.0 to 1.0)
     for (int i = 0; i < 5; i++) {
@@ -722,8 +543,10 @@ void SceneBuilder::BuildProceduralScene(Scene* scene) {
     float box_size = 2.0f;
     
     // === 加载纹理 ===
-    int mygo_texture_id = scene->AddTexture(PROJECT_DIR "/meshes/textures/texture_mygo.jpeg");
-    int thu_texture_id = scene->AddTexture(PROJECT_DIR "/meshes/textures/texture_thu.png");
+    int mygo_texture_id = scene->AddTexture(PROJECT_DIR "/textures/mygo.jpeg");
+    grassland::LogInfo("ProceduralScene: mygo texture id = {}", mygo_texture_id);
+    int thu_texture_id = scene->AddTexture(PROJECT_DIR "/textures/thu.png");
+    grassland::LogInfo("ProceduralScene: thu texture id = {}", thu_texture_id);
     
     // === 顶部圆盘面光源 ===
     float disk_radius = 0.6f;
@@ -734,64 +557,50 @@ void SceneBuilder::BuildProceduralScene(Scene* scene) {
         glm::vec3(0.0f, 0.0f, disk_radius)
     ));
     
-    // === Cornell Box 6面墙 ===
-    
-    // Floor (white)
-    scene->AddEntity(CreateGroundPlane(
-        glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Ceiling (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, 0.01f, box_size),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Back wall (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, 0.01f),
-        Material(glm::vec3(0.75f, 0.75f, 0.75f), 0.9f, 0.0f)
-    ));
-    
-    // Left wall (red)
-    scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.75f, 0.25f, 0.25f), 0.9f, 0.0f)
-    ));
-    
-    // Right wall (blue)
-    scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
-        glm::vec3(0.01f, box_size, box_size),
-        Material(glm::vec3(0.25f, 0.25f, 0.75f), 0.9f, 0.0f)
-    ));
+    BuildCornellBoxHelper(scene, box_size);
     
     // === 场景物体：两个带纹理的立方体（旋转让正面朝向相机） ===
     
-    // 左侧立方体：MyGO纹理
-    scene->AddEntity(std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/cube_uv.obj",
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f, mygo_texture_id),
-        glm::scale(
-            glm::translate(glm::mat4(1.0f), glm::vec3(-0.7f, -box_size + 0.6f, 0.0f)),
-            glm::vec3(0.6f, 0.6f, 0.6f)
-        )
-    ));
+    // 左侧立方体
+    {
+        glm::mat4 curT = glm::scale(
+            glm::translate(glm::mat4(1.0f), glm::vec3(-0.9f, -box_size + 0.6f, 0.0f)),
+            glm::vec3(0.8f, 0.8f, 0.8f)
+        );
+        auto ent = std::make_shared<Entity>(
+            PROJECT_DIR "/meshes/cube_uv.obj",
+            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f, mygo_texture_id),
+            curT
+        );
+        if (!ent->GetMaterials().empty()) {
+            grassland::LogInfo("ProceduralScene: left cube material texture_id = {}", ent->GetMaterials()[0].texture_id);
+        }
+        // Simulate prior-frame position (object is "static" now but had velocity before)
+        glm::mat4 prevT = glm::translate(curT, glm::vec3(0.4f, 0.0f, 0.0f)); // shifted to the right previously
+        // Set previous transform explicitly so it stays different from current across frames
+        ent->SetTransformNoPrev(prevT);
+        scene->AddEntity(ent);
+    }
     
-    // 右侧立方体：清华纹理
-    scene->AddEntity(std::make_shared<Entity>(
-        PROJECT_DIR "/meshes/cube_uv.obj",
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f, thu_texture_id),
-        glm::scale(
-            glm::translate(glm::mat4(1.0f), glm::vec3(0.7f, -box_size + 0.6f, 0.0f)),
-            glm::vec3(0.6f, 0.6f, 0.6f)
-        )
-    ));
+    // 右侧立方体
+    {
+        glm::mat4 curT = glm::scale(
+            glm::translate(glm::mat4(1.0f), glm::vec3(0.9f, -box_size + 0.6f, 0.0f)),
+            glm::vec3(0.8f, 0.8f, 0.8f)
+        );
+        auto ent = std::make_shared<Entity>(
+            PROJECT_DIR "/meshes/cube_uv.obj",
+            Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.8f, 0.0f, glm::vec3(0.0f), 0.0f, 1.0f, thu_texture_id),
+            curT
+        );
+        if (!ent->GetMaterials().empty()) {
+            grassland::LogInfo("ProceduralScene: right cube material texture_id = {}", ent->GetMaterials()[0].texture_id);
+        }
+        // Simulate prior-frame position (shift left previously)
+        glm::mat4 prevT = glm::translate(curT, glm::vec3(-0.4f, 0.0f, 0.0f));
+        ent->SetTransformNoPrev(prevT);
+        scene->AddEntity(ent);
+    }
     
     scene->BuildAccelerationStructures();
 }
@@ -813,6 +622,8 @@ void SceneBuilder::BuildBedroomScene(Scene* scene) {
         glm::mat4(1.0f),
         true  // Load materials from MTL file
     );
+    bedroom->LoadMesh(PROJECT_DIR "/meshes/bedroom/iscv2.obj");
+    
     scene->AddEntity(bedroom);
     
     grassland::LogInfo("Bedroom loaded with {} materials and {} submeshes",
