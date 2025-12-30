@@ -46,8 +46,8 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
         glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(scale));
         auto point_light = std::make_shared<Entity>(
             PROJECT_DIR "/meshes/sphere.obj",
-            Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color),
-		    T*S
+            Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color, 0.0f, glm::vec3(1.0f)),
+            T*S
         );
         AddEntity(point_light);
 	}
@@ -66,9 +66,9 @@ void Scene::AddLight(std::shared_ptr<Light> light) {
 
         auto area_light = std::make_shared<Entity>(
             PROJECT_DIR "/meshes/cube.obj",
-			Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color),
-			T * R
-		);
+            Material(glm::vec3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, light->color, 0.0f, glm::vec3(1.0f)),
+            T * R
+        );
         AddEntity(area_light);
 	}
     grassland::LogInfo("Added light to scene (total: {})", lights_.size());
@@ -133,18 +133,17 @@ void Scene::BuildAccelerationStructures() {
 }
 
 void Scene::UpdateInstances() {
-    if (!tlas_ || entities_.empty()) {
+    if (!tlas_ || entities_.empty() || !entity_info_buffer_) {
         return;
     }
 
-    // Recreate instances with updated transforms
+    // Update TLAS instances with new transforms
     std::vector<grassland::graphics::RayTracingInstance> instances;
     instances.reserve(entities_.size());
 
     for (size_t i = 0; i < entities_.size(); ++i) {
         auto& entity = entities_[i];
         if (entity->GetBLAS()) {
-            // Convert mat4 to mat4x3
             glm::mat4x3 transform_3x4 = glm::mat4x3(entity->GetTransform());
             
             auto instance = entity->GetBLAS()->MakeInstance(
@@ -158,8 +157,25 @@ void Scene::UpdateInstances() {
         }
     }
 
-    // Update TLAS
     tlas_->UpdateInstances(instances);
+    
+    // Read back current entity_infos, update only transforms, then re-upload
+    size_t entity_info_size = entities_.size() * sizeof(EntityInfo);
+    std::vector<EntityInfo> entity_infos(entities_.size());
+    
+    // Read current buffer (to preserve offsets and other data)
+    entity_info_buffer_->DownloadData(entity_infos.data(), entity_info_size);
+    
+    // Update only transform matrices
+    for (size_t i = 0; i < entities_.size(); ++i) {
+        entity_infos[i].objectToWorld = entities_[i]->GetTransform();
+        entity_infos[i].worldToObject = glm::inverse(entities_[i]->GetTransform());
+        entity_infos[i].objectToWorldPrev = entities_[i]->GetPreviousTransform();
+        entity_infos[i].worldToObjectPrev = glm::inverse(entities_[i]->GetPreviousTransform());
+    }
+    
+    // Re-upload updated entity_infos
+    entity_info_buffer_->UploadData(entity_infos.data(), entity_info_size);
 }
 
 //void Scene::UpdateMaterialsBuffer() {
@@ -219,6 +235,15 @@ void Scene::UpdateBuffers() {
         info.worldToObject = glm::inverse(entity->GetTransform());
         info.objectToWorldPrev = entity->GetPreviousTransform();
         info.worldToObjectPrev = glm::inverse(entity->GetPreviousTransform());
+        
+        // Debug log for motion blur cubes (last two entities in procedural scene)
+        size_t total_entities = entities_.size();
+        if (entity_idx >= total_entities - 2) {
+            glm::vec3 cur_pos = glm::vec3(info.objectToWorld[3]);
+            glm::vec3 prev_pos = glm::vec3(info.objectToWorldPrev[3]);
+            grassland::LogInfo("UpdateBuffers - Entity {}: cur_pos=({:.2f},{:.2f},{:.2f}), prev_pos=({:.2f},{:.2f},{:.2f})",
+                entity_idx, cur_pos.x, cur_pos.y, cur_pos.z, prev_pos.x, prev_pos.y, prev_pos.z);
+        }
 
         // Collect materials from entity (may have multiple)
         const auto& entity_materials = entity->GetMaterials();

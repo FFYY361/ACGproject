@@ -157,7 +157,7 @@ bool Entity::LoadMeshWithMaterials(const std::string& obj_file_path) {
         our_mat.roughness = 1.0f - mat.shininess / 100.0f;  // Approximate conversion
         our_mat.metallic = mat.metallic;
         our_mat.emission = glm::vec3(mat.emission[0], mat.emission[1], mat.emission[2]);
-        our_mat.ior = mat.ior;
+        our_mat.ior = glm::vec3(mat.ior);  // Convert float to vec3 (no dispersion by default)
         our_mat.transmission = mat.dissolve < 0.99f ? (1.0f - mat.dissolve) : 0.0f;
         our_mat.texture_id = -1;  // TODO: Load textures from mat.diffuse_texname
         our_mat.normal_id = -1;
@@ -306,7 +306,7 @@ void Entity::BuildBLAS(grassland::graphics::Core* core) {
 }
 
 void Entity::SetTransform(const glm::mat4& transform) {
-    // prev_transform_ = transform_;
+    prev_transform_ = transform_;  // 保存上一帧的变换
     transform_ = transform;
 }
 

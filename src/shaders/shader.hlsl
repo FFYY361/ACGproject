@@ -3,6 +3,7 @@
 #include "common.hlsli"
 #include "random.hlsli"
 #include "bsdf.hlsli"
+#include "toon.hlsli"
 
 
 void GetLightInfo(
@@ -196,6 +197,15 @@ float3 get_target_direction(float2 pixel_center)
     payload.cal_emission = true;
     payload.time = time;
     
+    // 为色散随机选择一个波长通道（R=0, G=1, B=2）
+    float rand_wave = next_rand(seed);
+    if (rand_wave < 0.333)
+        payload.wavelength_channel = 0;
+    else if (rand_wave < 0.666)
+        payload.wavelength_channel = 1;
+    else
+        payload.wavelength_channel = 2;
+    
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
     for (int bounce = 0; bounce < 8; bounce++)
@@ -255,6 +265,14 @@ float3 get_target_direction(float2 pixel_center)
         float3 P = payload.position;
         float3 N = payload.normal;
         float3 V = -ray.Direction;
+        
+        // === Volume Rendering: Emission ===
+        // Check if this material has volumetric properties
+        // Volume rendering should happen BEFORE hitting the surface (during ray travel)
+        // We need to handle it differently: when we hit a transmissive+volumetric surface,
+        // the volume rendering happens from entry to exit point
+        
+        // Note: This will be handled after we determine if we're entering or exiting the volume
         
         // (可选) 累加自发光 emission
         // 如果击中的是非常强的光源，通常我们就停止路径追踪了，因为光线已经“找到家”了
@@ -345,8 +363,249 @@ float3 get_target_direction(float2 pixel_center)
         //if (bounce == 1)
             //radiance += directLightContrib;
         //break;
+        
+        // === 卡通着色选项 (Fractal Cartoon风格) ===
+        // 检查材质是否启用卡通着色
+        if (payload.material.use_toon == 1)
+        {
+            if (bounce == 0)
+            {
+                float3 baseColor = payload.material.base_color;
+                float3 result = float3(0, 0, 0);
+                
+                // 描边检测：基于视角和法线的夹角（更严格的阈值）
+                float rim = 1.0 - abs(dot(N, V));
+                float outline = smoothstep(0.75, 0.85, rim);  // 提高阈值，只在真正的边缘出现
+                
+                // 计算光照（卡通分级）
+                for (int i = 0; i < lightinfo.num_light; ++i)
+                {
+                    Light light = lights[i];
+                    float3 L = normalize(light.position - P);
+                    float3 lightColor = light.color;
+                    
+                    if (light.type == 0) {
+                        float dist = length(light.position - P);
+                        lightColor /= (dist * dist + 1.0);
+                    } else {
+                        lightColor *= 0.012;
+                    }
+                    
+                    // 简单的卡通分级
+                    float NdotL = max(0.0, dot(N, L));
+                    float diffuse;
+                    
+                    if (payload.material.metallic > 0.7) {
+                        diffuse = step(0.5, NdotL);
+                    } else if (payload.material.metallic > 0.3) {
+                        diffuse = floor(NdotL * 3.0) / 2.0;
+                    } else {
+                        diffuse = floor(NdotL * 4.0) / 3.0;
+                    }
+                    
+                    result += baseColor * lightColor * (diffuse * 0.6 + 0.4);
+                }
+                
+                // 添加环境光
+                result += baseColor * 0.25;
+                
+                // 应用描边效果：在边缘区域直接使用黑色（或深色）
+                result = lerp(result, float3(0, 0, 0), outline);
+                
+                radiance += throughput * result;
+            }
+            else
+            {
+                // 间接照明：完全不贡献
+            }
+            break;
+        }
+        
         radiance += directLightContrib;
         //break;
+        
+        // === Volume Rendering (before BSDF sampling) ===
+        // If material has volumetric properties AND is transmissive, we need to:
+        // 1. Cast ray through the volume to find exit point
+        // 2. Accumulate emission and absorption along the path
+        // 3. Continue ray from exit point
+        
+        if (payload.material.volume_density > 0.001 && payload.material.transmission > 0.5)
+        {
+            // Cast ray from entry point (current hit) through the volume
+            RayDesc volume_ray;
+            volume_ray.Origin = P + ray.Direction * 0.001;  // Start slightly inside
+            volume_ray.Direction = ray.Direction;  // Continue in same direction
+            volume_ray.TMin = 0.001;
+            volume_ray.TMax = 100.0;  // Large distance to find exit
+            
+            RayPayload exit_payload;
+            exit_payload.hit = false;
+            exit_payload.isShadowRay = false;
+            exit_payload.time = payload.time;
+            exit_payload.wavelength_channel = payload.wavelength_channel;
+            exit_payload.dPdX = payload.dPdX;
+            exit_payload.dPdY = payload.dPdY;
+            exit_payload.dDdX = payload.dDdX;
+            exit_payload.dDdY = payload.dDdY;
+            exit_payload.angle = payload.angle;
+            exit_payload.width = payload.width;
+            
+            // Trace to find exit point from volume
+            TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, volume_ray, exit_payload);
+            
+            float march_distance = 0.0;
+            if (exit_payload.hit) {
+                march_distance = exit_payload.hit_distance;
+            } else {
+                // If no exit found, ray escaped - use large distance
+                march_distance = 100.0;
+            }
+            
+            // Ray marching parameters
+            int num_steps = 64;
+            float step_size = march_distance / (float)num_steps;
+            
+            float3 volume_L = float3(0, 0, 0);
+            float3 transmittance = float3(1, 1, 1);
+            bool scattered = false;
+            float3 scatter_pos = float3(0, 0, 0);
+            float3 scatter_dir = float3(0, 0, 0);
+            
+            // March through the volume
+            for (int step = 0; step < num_steps; step++)
+            {
+                // Jittered sample position to reduce banding
+                float t_sample = (step + next_rand(seed)) * step_size;
+                float3 sample_pos = volume_ray.Origin + volume_ray.Direction * t_sample;
+                
+                // Sample volume properties (uniform density for now)
+                float density = payload.material.volume_density;
+                float3 sigma_a = payload.material.volume_absorption * density;
+                float3 sigma_s = payload.material.volume_scattering * density;
+                float3 sigma_t = sigma_a + sigma_s; // Extinction coefficient
+                float3 emission_vol = payload.material.volume_emission * density;
+                float g = payload.material.volume_anisotropy;
+                
+                // Beer-Lambert law for transmittance through this step
+                float3 step_transmittance = VolumeTransmittance(sigma_t, step_size);
+                
+                // === 1. Emission contribution ===
+                // L += T * emission * ds
+                volume_L += transmittance * emission_vol * step_size;
+                
+                // === 2. In-scattering (single scattering approximation) ===
+                // Sample scattering event probabilistically
+                if (!scattered && length(sigma_s) > 0.001) {
+                    // Probability of scattering in this step
+                    float3 scatter_prob = float3(1, 1, 1) - step_transmittance;
+                    float avg_scatter_prob = (scatter_prob.r + scatter_prob.g + scatter_prob.b) / 3.0;
+                    
+                    if (next_rand(seed) < avg_scatter_prob) {
+                        // Scattering event occurred!
+                        scattered = true;
+                        scatter_pos = sample_pos;
+                        
+                        // Sample new direction using phase function
+                        float u1 = next_rand(seed);
+                        float u2 = next_rand(seed);
+                        scatter_dir = SampleHenyeyGreenstein(volume_ray.Direction, g, u1, u2);
+                        
+                        // Direct lighting from lights at scatter point
+                        float3 scatter_L = float3(0, 0, 0);
+                        
+                        for (int light_idx = 0; light_idx < lightinfo.num_light; light_idx++) {
+                            Light light = lights[light_idx];
+                            float3 light_pos = light.position;
+                            
+                            if (light.type == 1) {
+                                light_pos += light.u * (next_rand(seed) - 0.5) + light.v * (next_rand(seed) - 0.5);
+                            }
+                            
+                            float3 L_dir, L_intensity;
+                            float dist, light_pdf;
+                            GetLightInfo(light, scatter_pos, light_pos, L_intensity, light_pdf, L_dir, dist);
+                            
+                            // Shadow ray from scatter point to light
+                            RayDesc shadowRay;
+                            shadowRay.Origin = scatter_pos;
+                            shadowRay.Direction = L_dir;
+                            shadowRay.TMin = 0.001;
+                            shadowRay.TMax = dist - 0.01;
+                            
+                            RayPayload shadowPayload;
+                            shadowPayload.time = payload.time;
+                            shadowPayload.hit = true;
+                            shadowPayload.isShadowRay = true;
+                            shadowPayload.shadow = float3(1, 1, 1);
+                            
+                            TraceRay(as, RAY_FLAG_NONE, 0xFF, 0, 1, 0, shadowRay, shadowPayload);
+                            
+                            if (length(shadowPayload.shadow) > 0.001) {
+                                float cosTheta = dot(-volume_ray.Direction, L_dir);
+                                float phase = HenyeyGreensteinPhase(g, cosTheta);
+                                scatter_L += shadowPayload.shadow * L_intensity * sigma_s * phase / light_pdf;
+                            }
+                        }
+                        
+                        // Add scattered light contribution
+                        volume_L += transmittance * scatter_L * step_size;
+                        
+                        // Update ray direction for continuation
+                        // (Will be handled after the loop)
+                    }
+                }
+                
+                // Update transmittance for next step
+                transmittance *= step_transmittance;
+                
+                // Early ray termination if transmittance is negligible
+                if (max(transmittance.x, max(transmittance.y, transmittance.z)) < 0.001)
+                    break;
+            }
+            
+            // Accumulate volume emission contribution
+            radiance += throughput * volume_L;
+            
+            // Modulate throughput by volume transmittance
+            throughput *= transmittance;
+            
+            // If volume absorbed too much light, terminate path
+            if (max(throughput.x, max(throughput.y, throughput.z)) < 0.001)
+                break;
+            
+            // Handle scattering event or volume exit
+            if (scattered) {
+                // Ray scattered inside volume - continue from scatter point in new direction
+                ray.Origin = scatter_pos + scatter_dir * 0.001;
+                ray.Direction = scatter_dir;
+                
+                // Mark as volumetric scattering for MIS
+                last_bsdf_pdf = -1.0;
+                last_hit_pos = scatter_pos;
+                continue;
+            } else if (exit_payload.hit) {
+                // No scattering, continue from exit point
+                ray.Origin = volume_ray.Origin + volume_ray.Direction * (march_distance + 0.001);
+                ray.Direction = volume_ray.Direction;
+                
+                // Update payload for next iteration
+                payload.dPdX = exit_payload.dPdX;
+                payload.dPdY = exit_payload.dPdY;
+                payload.dDdX = exit_payload.dDdX;
+                payload.dDdY = exit_payload.dDdY;
+                payload.angle = exit_payload.angle;
+                payload.width = exit_payload.width;
+                
+                // Skip BSDF sampling for this bounce - we're continuing through volume
+                last_bsdf_pdf = -1.0; // Mark as volumetric path
+                last_hit_pos = ray.Origin;
+                continue; // Go to next path bounce
+            } else {
+                // Ray escaped the volume - terminate
+                break;
+            }
+        }
         
         // === 使用统一的BSDF采样 ===
         BSDFSample bsdf_sample;
@@ -380,7 +639,16 @@ float3 get_target_direction(float2 pixel_center)
         }
         */
         // 更新throughput
-        throughput *= bsdf_sample.bsdf * abs(dot(N, bsdf_sample.direction)) / bsdf_sample.pdf;
+        float3 bsdf_contrib = bsdf_sample.bsdf * abs(dot(N, bsdf_sample.direction)) / bsdf_sample.pdf;
+        throughput *= bsdf_contrib;
+        
+        // 色散：只保留对应波长通道的贡献
+        if (payload.wavelength_channel == 0)
+            throughput = float3(throughput.r, 0, 0);
+        else if (payload.wavelength_channel == 1)
+            throughput = float3(0, throughput.g, 0);
+        else if (payload.wavelength_channel == 2)
+            throughput = float3(0, 0, throughput.b);
         
         // 更新光线
         float3 next_dir = normalize(bsdf_sample.direction);
@@ -439,12 +707,9 @@ float3 get_target_direction(float2 pixel_center)
     if (payload.isShadowRay)
         return; // 阴影射线不需要天空颜色
     
-    
-    float3 topColor = float3(0.2, 0.2, 0.6);
-    float3 bottomColor = float3(0.1, 0.1, 0.4);
-    float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
+    // 使用黑色背景
     Material mat;
-    mat.base_color = lerp(bottomColor, topColor, t);
+    mat.base_color = float3(0.0, 0.0, 0.0);
     payload.material = mat;
   
   
@@ -475,8 +740,36 @@ void AnyHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     // 2. 针对阴影射线 (Shadow Ray)
     // 只有当你的渲染器逻辑里，用 payload.shadow 来标记剩余光强时才这样做
     if (payload.isShadowRay)
-    {
-        // 核心逻辑：既然是半透明，光线必须“穿过去”才能计算后面的遮挡
+    {        // 对于体积材质，阴影射线需要考虑体积的吸收
+        if (mat.volume_density > 0.001f && mat.transmission > 0.5f)
+        {
+            // 计算从当前位置到下一个交点的距离
+            float distance = RayTCurrent();
+            
+            // 计算体积吸收
+            float density = mat.volume_density;
+            float3 sigma_a = mat.volume_absorption * density;
+            float3 sigma_t = sigma_a; // No scattering for shadow rays (simplification)
+            
+            // Apply Beer's law transmittance
+            float3 transmittance = VolumeTransmittance(sigma_t, distance);
+            payload.shadow *= transmittance;
+            
+            // If transmittance is very low, stop the ray
+            if (max(payload.shadow.x, max(payload.shadow.y, payload.shadow.z)) < 0.001f)
+            {
+                AcceptHitAndEndSearch();
+                return;
+            }
+            else
+            {
+                // Continue through the volume
+                IgnoreHit();
+                return;
+            }
+        }
+        
+        // 对于普通半透明表面，使用alpha衰减        // 核心逻辑：既然是半透明，光线必须“穿过去”才能计算后面的遮挡
         payload.shadow *= (1.0f - alpha);
 
         if (length(payload.shadow) < 0.001f)
@@ -495,16 +788,17 @@ void AnyHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     else
     {
         // 3. 对于相机射线 (Primary Ray)
-        // 如果碰到全透明的地方，必须 IgnoreHit，否则你会看到一个黑色的几何体表面
-        if (max(alpha[0], max(alpha[1], alpha[2])) < 0.01f)
+        // 对于体积材质，我们需要击中表面以便进行体积渲染
+        // 只有在材质完全透明且没有体积属性时才忽略
+        if (max(alpha[0], max(alpha[1], alpha[2])) < 0.01f && mat.volume_density < 0.001f)
         {
             IgnoreHit();
             return;
         }
         else
         {
+            // 接受击中，无论是表面渲染还是体积渲染
             //AcceptHitAndEndSearch();
-            //IgnoreHit();
             return;
         }
     }
@@ -515,6 +809,7 @@ void AnyHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     
     payload.hit = true;
+    payload.hit_distance = RayTCurrent(); // Store hit distance for volume rendering
     
     if (payload.isShadowRay)
     {
