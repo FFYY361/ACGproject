@@ -654,22 +654,38 @@ void SceneBuilder::BuildBedroomSplitScene(Scene* scene) {
     M[2] = glm::vec4(0, 1, 0, 0);  // z ->  y'
 
     // 平移：沿 y' 轴 5 个单位（即世界 z 方向）
-	glm::vec3 translate = glm::vec3(-20, -35, -10);
+	glm::vec3 translate = glm::vec3(-19, -35, -14);
     M[3] = glm::vec4(translate, 1);
 
 
     scene->AddLight(CreateAreaLight(
         glm::vec3(1.0f, 35.0f, -10.0f) + translate,
-        glm::vec3(20000.0f, 20000.0f, 20000.0f),
+        glm::vec3(25000.0f, 25000.0f, 25000.0f),
         glm::vec3(0.5, 0.0f, 0.0f),
         glm::vec3(0.0f, 0.0f, 0.5f)
     ));
+
+
+
+
+	/*glm::vec4 poslight = M * glm::vec4(glm::vec3(20.0f, -9.0f, 43.1f), 1.0f);
+    scene->AddLight(CreateAreaLight(
+        glm::vec3(poslight[0], poslight[1], poslight[2]),
+        glm::vec3(1000.0f, 1000.0f, 1000.0f),
+        glm::vec3(2.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 2.0f)
+    ));*/
+    /*scene->AddLight(CreatePointLight(
+        glm::vec3(poslight[0], poslight[1], poslight[2]),
+        glm::vec3(4000.0f, 4000.0f, 4000.0f)
+    ));*/
+
     //glm::vec4 pos = M * glm::vec4(glm::vec3(11.2f, 20.0f, 32.7f), 1.0f);
     glm::vec4 pos = M * glm::vec4(glm::vec3(33.0f, 16.0f, 28.0f), 1.0f);
     glm::vec3 point_light = glm::vec3(pos[0], pos[1], pos[2]);
     scene->AddLight(CreatePointLight(
         point_light,
-        glm::vec3(4000.0f, 4000.0f, 4000.0f)
+        glm::vec3(5000.0f, 5000.0f, 5000.0f)
 	));
     
 	int texture_u1_v1 = scene->AddTexture(PROJECT_DIR "/meshes/bedroom/split_meshes/iscv2_u1_v1.jpg");
@@ -822,13 +838,6 @@ void SceneBuilder::BuildBedroomSplitScene(Scene* scene) {
     // 3. 按照 S * M * T 的顺序相乘
     // 注意：C++ 中矩阵乘法是从左到右结合的，但逻辑是从右向左应用到顶点
     glm::mat4 M_mirror = M * T * S;
-
-    auto M2 = M * T;
-    grassland::LogInfo("M2 = [{}, {}, {}, {} | {}, {}, {}, {} | {}, {}, {}, {} | {}, {}, {}, {}]",
-        M2[0][0], M2[1][0], M2[2][0], M2[3][0],
-        M2[0][1], M2[1][1], M2[2][1], M2[3][1],
-        M2[0][2], M2[1][2], M2[2][2], M2[3][2],
-        M2[0][3], M2[1][3], M2[2][3], M2[3][3]);
     auto mirror = std::make_shared<Entity>(
         PROJECT_DIR "/meshes/cube.obj",
         mirror_mat,
