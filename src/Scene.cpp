@@ -91,6 +91,12 @@ void Scene::Clear() {
     texture_info_buffer_.reset();
     texture_sampler_.reset();
     num_texture_ = 0;
+
+    // Clear environment map resources
+    environment_map_.reset();
+    has_environment_map_ = false;
+    environment_intensity_ = 1.0f;
+    
 	grassland::LogInfo("Cleared scene");
 }
 
@@ -570,4 +576,35 @@ grassland::graphics::Image* Scene::GetTexture(int index) const {
         return nullptr;
     }
     return textures_[index].get();
+}
+
+bool Scene::LoadEnvironmentMap(const std::string& file_path) {
+    // Load HDR environment map (expects .hdr format)
+    int width, height, channels;
+    
+    // Use stbi_loadf for HDR images to preserve float data
+    float* data = stbi_loadf(file_path.c_str(), &width, &height, &channels, 4);
+    if (!data) {
+        grassland::LogError("Failed to load environment map: {}", file_path);
+        has_environment_map_ = false;
+        return false;
+    }
+    
+    grassland::LogInfo("Loaded environment map: {} ({}x{}, {} channels)", 
+                      file_path, width, height, channels);
+    
+    // Create HDR texture with R32G32B32A32_SFLOAT format
+    core_->CreateImage(width, height,
+                      grassland::graphics::IMAGE_FORMAT_R32G32B32A32_SFLOAT,
+                      &environment_map_);
+    
+    // Upload float data
+    environment_map_->UploadData(data);
+    
+    stbi_image_free(data);
+    
+    has_environment_map_ = true;
+    grassland::LogInfo("Environment map loaded successfully");
+    
+    return true;
 }

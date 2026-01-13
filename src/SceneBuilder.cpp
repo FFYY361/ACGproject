@@ -103,6 +103,12 @@ void SceneBuilder::BuildCornellBoxHelper(Scene* scene, float box_size) {
 
 void SceneBuilder::BuildDefaultScene(Scene* scene) {
     scene->Clear();
+    
+    // === Optional: Load HDR Environment Map ===
+    // Uncomment the following line to load an HDR skybox (.hdr format)
+    // Place your HDR file (e.g., "studio.hdr" or "forest.hdr") in appropriate directory
+    // scene->LoadEnvironmentMap(PROJECT_DIR "/textures/studio.hdr");
+    // scene->SetEnvironmentIntensity(1.0f); // Adjust intensity as needed
 
     float box_size = 1.5f;
 
@@ -177,8 +183,23 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
     // === 场景物体2：透明玻璃立方体（前方，旋转45度） ===
     scene->AddEntity(std::make_shared<Entity>(
         PROJECT_DIR "/meshes/cube.obj",
-        // Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, glm::vec3(1.51f, 1.51f, 1.51f), idx_text, -1),  // 色散玻璃 IOR: R=1.51, G=1.52, B=1.54 (轻微色散)
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, glm::vec3(1.51f, 1.53f, 1.56f), -1, -1),  // 色散玻璃 IOR: R=1.51, G=1.52, B=1.54 (轻微色散)
+        Material(
+            glm::vec3(1.0f, 1.0f, 1.0f),    // base_color
+            glm::vec3(0.0f),                 // emission
+            glm::vec3(1.0f),                 // alpha (不透明度，1.0=不透明，0.0=透明)
+            0.05f,                           // roughness
+            0.0f,                            // metallic
+            0.0f,                            // specular
+            1.0f,                            // transmission
+            glm::vec3(1.51f, 1.53f, 1.56f), // ior (色散)
+            0.0f,                            // subsurface
+            0.0f,                            // clearcoat
+            0.0f,                            // sheen
+            -1,                              // texture_id
+            -1,                              // normal_id
+            0,                               // use_vertex_color
+            0                                // use_toon
+        ),
         glm::scale(
             glm::rotate(
                 glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, -box_size + 0.6f, 0.4f)),
@@ -188,6 +209,9 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
             glm::vec3(0.5f, 0.5f, 0.5f)
         )
     ));
+
+    scene->LoadEnvironmentMap(PROJECT_DIR "/textures/kloofendal_48d_partly_cloudy_8k.hdr");
+    scene->SetEnvironmentIntensity(1.0f);
 
 
     //scene->AddEntity(std::make_shared<Entity>(

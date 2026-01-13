@@ -5,6 +5,34 @@
 #include "bsdf.hlsli"
 #include "toon.hlsli"
 
+// Sample environment map using equirectangular mapping
+// direction: normalized world-space direction vector
+// Returns: HDR color from environment map
+float3 SampleEnvironmentMap(float3 direction)
+{
+    if (environment_info.has_environment_map == 0)
+    {
+        // No environment map, return black
+        return float3(0.0, 0.0, 0.0);
+    }
+    
+    // Convert direction to spherical coordinates
+    // theta: angle from +Y axis (0 to PI)
+    // phi: angle around Y axis (0 to 2*PI)
+    float theta = acos(clamp(direction.y, -1.0, 1.0));
+    float phi = atan2(direction.z, direction.x);
+    
+    // Convert to UV coordinates [0,1]
+    float u = phi / (2.0 * PI) + 0.5;
+    float v = theta / PI;
+    
+    // Sample the environment map
+    float3 color = environment_map.SampleLevel(textureSampler, float2(u, v), 0).rgb;
+    
+    // Apply intensity multiplier
+    return color * environment_info.environment_intensity;
+}
+
 
 void GetLightInfo(
     in Light light, in float3 P, in float3 light_pos,
@@ -701,20 +729,27 @@ float3 get_target_direction(float2 pixel_center)
 }
 
 [shader("miss")] void MissMain(inout RayPayload payload) {
-    // Sky gradient
-    //  float t = 0.5 * (normalize(WorldRayDirection()).y + 1.0);
-    //  payload.color = lerp(float3(1.0, 1.0, 1.0), float3(0.5, 0.7, 1.0), t);
-  
     payload.hit = false;
     if (payload.isShadowRay)
         return; // 阴影射线不需要天空颜色
     
-    // 使用黑色背景
+    // Sample environment map if available
     Material mat;
-    mat.base_color = float3(0.0, 0.0, 0.0);
+    if (environment_info.has_environment_map == 1)
+    {
+        // Sample HDR environment map based on ray direction
+        float3 env_color = SampleEnvironmentMap(WorldRayDirection());
+        mat.base_color = env_color;
+        mat.emission = env_color;  // Treat as emissive for lighting
+    }
+    else
+    {
+        // Use black background if no environment map
+        mat.base_color = float3(0.0, 0.0, 0.0);
+        mat.emission = float3(0.0, 0.0, 0.0);
+    }
+    
     payload.material = mat;
-  
-  
     payload.instance_id = 0xFFFFFFFF; // Invalid ID for miss
 }
 
