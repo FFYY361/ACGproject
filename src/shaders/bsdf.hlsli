@@ -1,22 +1,6 @@
 #include "common.hlsli"
 #include "random.hlsli"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ===============================================================================================
 // 0. 结构体定义 (Required)
 // ===============================================================================================
@@ -231,33 +215,84 @@ bool IsSameHemisphere(float3 A, float3 B, float3 N)
     return dot(A, N) * dot(B, N) > 0.0;
 }
 
-
-// ===============================================================================================
-// 3. Sample 函数实现
-// 采样下一条光线 L
-// ===============================================================================================
-
-void GetLobeWeight(
-float3 V, float3 N, float metallic, float transmission, float eta, 
-out float w_spec, out float w_diff, out float w_trans
-)
+float Luminance(float3 color)
 {
-    float Fresnel = F_Dielectric(abs(dot(V, N)), eta);
-    
-    // 金属全是镜面反射
-    w_spec = lerp(Fresnel, 1.0, metallic);
-    
-    // 漫反射：非金属 * 透过的能量 * 不透明的部分
-    w_diff = (1.0 - metallic) * (1.0 - Fresnel) * (1.0 - transmission);
-    
-    // 透射：非金属 * 透明度（Fresnel 已经在 BTDF 公式中处理）
-    w_trans = (1.0 - metallic) * transmission;
+    return dot(color, float3(0.2126, 0.7152, 0.0722));
 }
 
+// ===============================================================================================
+// 辅助函数：Disney Diffuse 实现 (用于支持 Subsurface 近似)
+// ===============================================================================================
+float3 EvalDisneyDiffuse(float NdotL, float NdotV, float LdotH, float roughness, float3 baseColor, float subsurface)
+{
+    float Fd90 = 0.5 + 2.0 * roughness * LdotH * LdotH;
+    float FL = pow(1.0 - NdotL, 5);
+    float FV = pow(1.0 - NdotV, 5);
+    
+    // 基础 Diffuse (Retro-reflection oriented)
+    float Fd = lerp(1.0, Fd90, FL) * lerp(1.0, Fd90, FV);
+    
+    // Subsurface 近似 (Based on Hanrahan-Krueger)
+    // Fss90 通常更加平坦
+    float Fss90 = LdotH * LdotH * roughness;
+    float Fss = lerp(1.0, Fss90, FL) * lerp(1.0, Fss90, FV);
+    float ss = 1.25 * (Fss * (1.0 / (NdotL + NdotV + EPS) - 0.5) + 0.5);
+    
+    // 混合两者
+    float3 diffuse = baseColor * INV_PI * lerp(Fd, ss, subsurface);
+    return diffuse;
+}
+
+// Sheen 近似
+float3 EvalSheen(float LdotH, float sheenIntensity, float3 baseColor)
+{
+    if (sheenIntensity <= 0.0)
+        return float3(0, 0, 0);
+    float FH = pow(1.0 - LdotH, 5);
+    float3 color = baseColor / (Luminance(baseColor) + EPS); // 归一化颜色
+    return sheenIntensity * baseColor * FH; // 简单的 Sheen 颜色叠加
+}
+
+// ===============================================================================================
+// 3. GetLobeWeight 函数实现 (新增 Clearcoat 权重)
+// ===============================================================================================
 
 
-// 仅评估 BSDF 值和 PDF（用于 NEE）
-void EvalBSDFForNEE(
+void GetLobeWeight(
+    float3 V, float3 N, float metallic, float transmission, float eta,
+    float clearcoat, float clearcoatRoughness,
+    out float w_spec, out float w_diff, out float w_trans, out float w_cc
+)
+{
+    float NdotV = abs(dot(V, N));
+    
+    // 1. 计算 Clearcoat 权重 (假设 Clearcoat IOR = 1.5 -> F0 = 0.04)
+    // Clearcoat 作为一个顶层，它的反射强度基于 Fresnel
+    float F_cc = Luminance(F_Schlick(NdotV, float3(0.25, 0.25, 0.25)));
+    w_cc = clearcoat * F_cc;
+    
+    // 剩余能量传递给 Base Layer
+    float attenuation = 1.0 - w_cc;
+    
+    // 2. Base Layer 的 Fresnel (用于主 Specular)
+    float FresnelBase = F_Dielectric(NdotV, eta);
+    
+    // 金属全是镜面反射
+    float base_spec = lerp(FresnelBase, 1.0, metallic);
+    float base_diff = (1.0 - metallic) * (1.0 - FresnelBase) * (1.0 - transmission);
+    float base_trans = (1.0 - metallic) * transmission;
+    
+    // 应用 Clearcoat 的衰减
+    w_spec = base_spec * attenuation;
+    w_diff = base_diff * attenuation;
+    w_trans = base_trans * attenuation;
+
+}
+
+// ===============================================================================================
+// 4. EvalBSDF 函数实现 (整合 Subsurface, Specular Intensity, Clearcoat, Sheen)
+// ===============================================================================================
+void EvalBSDF(
     float3 V,
     float3 L,
     float3 N,
@@ -266,19 +301,31 @@ void EvalBSDFForNEE(
     out float pdf
 )
 {
-    float alpha = max(0.001, mat.roughness * mat.roughness);
+    // 参数准备
+    float roughness = max(0.001, mat.roughness);
+    float alpha = roughness * roughness;
     float metallic = mat.metallic;
     float ior = mat.ior;
     float transmission = mat.transmission;
     float3 basecolor = mat.base_color;
+    
+    // Clearcoat 固定参数 (如果没有指定，通常设为 0.25 或更小)
+    float clearcoatRoughness = 0.2;
+    float alphaCC = clearcoatRoughness * clearcoatRoughness;
     
     bsdf_value = float3(0, 0, 0);
     pdf = 0.0;
     
     bool isTransmission = !(dot(V, N) * dot(L, N) > 0.0);
     
-    float f0 = pow((1 - ior) / (1 + ior), 2.0);
-    float3 F0 = lerp(float3(f0, f0, f0), basecolor, metallic);
+    // 计算基础 F0 (考虑 Specular Intensity)
+    // Dielectric F0 = ((ior-1)/(ior+1))^2. 
+    // Specular 参数通常用于缩放这个 F0. (Disney: spec=0.5 -> IOR=1.5)
+    float f0_dielectric = pow((ior - 1.0) / (ior + 1.0), 2.0);
+    // 重新映射: spec 0.5 对应标准 f0, spec 0 -> 0, spec 1 -> 2*f0
+    float3 F0_dielectric_vec = float3(f0_dielectric, f0_dielectric, f0_dielectric);
+    float3 F0 = lerp(F0_dielectric_vec, basecolor, metallic);
+    
     
     float3 H;
     float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
@@ -287,9 +334,7 @@ void EvalBSDFForNEE(
     {
         H = normalize(eta * V + L);
         if (IsSameHemisphere(V, L, H))
-        {
-            return; // 无效配置
-        }
+            return;
     }
     else
     {
@@ -299,157 +344,103 @@ void EvalBSDFForNEE(
     if (dot(H, N) < 0.0)
         H = -H;
     
-    float wSpec, wDiff, wTrans;
-    GetLobeWeight(V, H, metallic, transmission, eta, wSpec, wDiff, wTrans);
+    // 计算各个 Lobe 的权重 (PDF 选择概率)
+    float wSpec, wDiff, wTrans, wCC;
+    GetLobeWeight(V, N, metallic, transmission, eta, mat.clearcoat, clearcoatRoughness, wSpec, wDiff, wTrans, wCC);
     
-    float sumW = wDiff + wSpec + wTrans + 1e-6;
+    float sumW = wDiff + wSpec + wTrans + wCC + 1e-6;
     float pDiff = wDiff / sumW;
     float pSpec = wSpec / sumW;
     float pTrans = wTrans / sumW;
+    float pCC = wCC / sumW;
     
+    
+    float NdotV = abs(dot(N, V));
+    float NdotL = abs(dot(N, L));
+    float LdotH = abs(dot(L, H));
+    float VdotH = abs(dot(V, H));
+    float NdotH = abs(dot(N, H));
+
+    // Clearcoat Fresnel 用于衰减底层
+    float3 Fc = F_Schlick(VdotH, 0.04); // Clearcoat IOR 1.5 -> F0=0.04
+    float ccAttenuation = 1.0;
+
+    // ===========================
+    // Evaluation Logic
+    // ===========================
+
     if (isTransmission)
     {
-        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
-        float D = D_GGX(abs(dot(N, H)), alpha);
+        // 透射部分 (BTDF)
+        // 注意：透射层也被 Clearcoat 覆盖，所以需要 ccAttenuation
         
-        // Fresnel 项：透射部分 = 1 - F
-        float3 F_color = F_Schlick(abs(dot(L, H)), F0);
-        float3 T_color = 1.0 - F_color;
+        float G = G_Smith(NdotV, NdotL, alpha);
+        float D = D_GGX(NdotH, alpha);
         
-        float sqrtDenom = eta * abs(dot(V, H)) + abs(dot(L, H));
+        float3 F_color = F_Schlick(LdotH, F0);
+        float3 T_color = 1.0 - F_color; // 内部 Fresnel
+        
+        float sqrtDenom = eta * VdotH + LdotH;
         float denom = sqrtDenom * sqrtDenom + EPS;
         
-        // BTDF 公式（包含 Fresnel 透射系数）
-        float3 btdf = abs(dot(V, H)) * abs(dot(L, H)) * T_color * G * D / (abs(dot(N, V)) * abs(dot(N, L)) * denom + EPS);
+        float3 btdf = VdotH * LdotH * T_color * G * D / (NdotV * NdotL * denom + EPS);
         
-        // 注意：pTrans 不再包含 (1-F)，因为已经在 T_color 中
-        bsdf_value += pTrans * btdf * basecolor;
+        // 应用 Clearcoat 衰减
+        bsdf_value += pTrans * btdf * basecolor * ccAttenuation;
         
-        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
-        float jacobian = abs(dot(V, H)) / denom;
+        float pdfH = D * G1_GGX(VdotH, alpha) * VdotH / (abs(dot(V, N)) + EPS);
+        float jacobian = VdotH / denom;
         pdf += pTrans * pdfH * jacobian;
     }
     else
     {
-        // Diffuse
-        bsdf_value += pDiff * BurleyDiffuseTerm(N, V, L, mat.roughness) * basecolor / PI;
-        pdf += pDiff * abs(dot(N, L)) / PI;
+        // 反射部分
         
-        // Specular
-        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
-        float D = D_GGX(abs(dot(N, H)), alpha);
-        float3 F_color = F_Schlick(abs(dot(V, H)), F0);
+        // 1. Clearcoat Lobe (新增)
+        if (mat.clearcoat > 0.0)
+        {
+            float D_cc = D_GGX(NdotH, alphaCC);
+            float G_cc = G_Smith(NdotV, NdotL, alphaCC); // 通常 Clearcoat 使用简单的 G，这里复用 Smith
+            float3 F_cc_term = Fc; // 使用之前计算的 Fc
+            
+            float3 brdf_cc = F_cc_term * D_cc * G_cc / (4.0 * NdotV * NdotL + EPS);
+            bsdf_value += pCC * brdf_cc * mat.clearcoat; // 强度受 clearcoat 参数控制
+            
+            float pdfH_cc = D_cc * G1_GGX(LdotH, alphaCC) * LdotH / (abs(dot(L, N)) + EPS);
+            float jacobian_cc = 1.0 / (4.0 * VdotH + EPS);
+            pdf += pCC * pdfH_cc * jacobian_cc;
+        }
+
+        // 2. Base Diffuse + Subsurface + Sheen
+        // 计算 Disney Diffuse 以处理 Subsurface
+        float3 diffuseTerm = EvalDisneyDiffuse(NdotL, NdotV, LdotH, roughness, basecolor, mat.subsurface);
         
-        float3 brdf = F_color * G * D / (4.0 * abs(dot(N, V)) * abs(dot(N, L)) + EPS);
-        bsdf_value += pSpec * brdf;
+        // 计算 Sheen (相加项)
+        float3 sheenTerm = EvalSheen(LdotH, mat.sheen, basecolor);
         
-        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
-        float jacobian = 1.0 / (4.0 * abs(dot(V, H)) + EPS);
+        // 组合 Diffuse: (Diffuse + Sheen) * Attenuation
+        bsdf_value += pDiff * (diffuseTerm + sheenTerm) * ccAttenuation;
+        
+        // Diffuse PDF (Lambertian 近似)
+        pdf += pDiff * NdotL * INV_PI;
+
+        // 3. Base Specular
+        float G = G_Smith(NdotV, NdotL, alpha);
+        float D = D_GGX(NdotH, alpha);
+        float3 F_color = F_Schlick(VdotH, F0);
+        
+        float3 brdf_spec = F_color * G * D / (4.0 * NdotV * NdotL + EPS);
+        bsdf_value += pSpec * brdf_spec * ccAttenuation;
+        
+        float pdfH = D * G1_GGX(LdotH, alpha) * LdotH / (abs(dot(L, N)) + EPS);
+        float jacobian = 1.0 / (4.0 * VdotH + EPS);
         pdf += pSpec * pdfH * jacobian;
     }
 }
 
-// 内部使用：完整评估（返回结构体）
-BSDFSample EvalBSDF_Internal(
-    float3 V,
-    float3 L,
-    float3 N,
-    Material mat
-)
-{
-    float alpha = max(0.001, mat.roughness * mat.roughness); // 防止除零
-    float metallic = mat.metallic;
-    float ior = mat.ior;
-    float transmission = mat.transmission;
-    float3 basecolor = mat.base_color;
-    
-    BSDFSample ret;
-    ret.direction = L;
-    ret.bsdf = 0;
-    ret.pdf = 0;
-    bool isTransmission = !(dot(V, N) * dot(L, N) > 0.0);
-    
-    float f0 = pow((1 - ior) / (1 + ior), 2.0); // 非金属部分的F0)
-    float3 F0 = lerp(float3(f0, f0, f0), basecolor, metallic);
-    
-    float3 H;
-    float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
-    if (isTransmission)
-    {
-        H = normalize(eta * V + L);
-        if (IsSameHemisphere(V, L, H) == true)
-        {
-            ret.bsdf = 0;
-            ret.pdf = 0;
-            return ret;
-        }
-    }
-    else
-    {
-        H = normalize(V + L);
-    }
-    if (dot(H, N) < 0.0)
-        H = -H;
-    
-    
-    float wSpec;
-    float wDiff;
-    float wTrans;
-    GetLobeWeight(V, H, metallic, transmission, eta, wSpec, wDiff, wTrans);
-    
-    float sumW = wDiff + wSpec + wTrans + 1e-6;
-    float pDiff = wDiff / sumW;
-    float pSpec = wSpec / sumW;
-    float pTrans = wTrans / sumW;
-    
-    bool tir = false;
-    
-    if (isTransmission == true)
-    {
-        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
-        float D = D_GGX(abs(dot(N, H)), alpha);
-        
-        // Fresnel 透射系数
-        float3 F_color = F_Schlick(abs(dot(L, H)), F0);
-        float3 T_color = 1.0 - F_color;
-        
-        float sqrtDenom = eta * abs(dot(V, H)) + abs(dot(L, H));
-        float denom = sqrtDenom * sqrtDenom + EPS;
-        
-        // BTDF
-        float3 btdf = abs(dot(V, H)) * abs(dot(L, H)) * T_color * G * D / (abs(dot(N, V)) * abs(dot(N, L)) * denom + EPS);
-        ret.bsdf += pTrans * btdf * basecolor;
-        
-        // PDF
-        float pdfH = D * G1_GGX(abs(dot(V, H)), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
-        float jacobian = abs(dot(V, H)) / denom;
-        ret.pdf += pTrans * pdfH * jacobian;
-    }
-    else
-    {
-        // Diffuse
-        ret.bsdf += pDiff * BurleyDiffuseTerm(N, V, L, mat.roughness) * basecolor / PI;
-        ret.pdf += pDiff * abs(dot(N, L)) / PI;
-        // Specular
-        float3 H = normalize(V + L);
-        float G = G_Smith(abs(dot(N, V)), abs(dot(N, L)), alpha);
-        float D = D_GGX(abs(dot(N, H)), alpha);
-        float3 F_color = F_Schlick(abs(dot(V, H)), F0);
-        
-        float3 brdf = F_color * G * D / (4.0 * abs(dot(N, V)) * abs(dot(N, L)) + EPS);
-        ret.bsdf += pSpec * brdf;
-        //Use PDF For VNDF sampling
-        float pdfH = D * G1_GGX(dot(V, H), alpha) * abs(dot(V, H)) / (abs(dot(V, N)) + EPS);
-        float jacobian = 1.0 / (4.0 * abs(dot(V, H)) + EPS);
-        float pdfL = pdfH * jacobian;
-        ret.pdf += pSpec * pdfL;
-        //ret.bsdf /= (pSpec + pDiff);
-    }
-    ret.isTransmission = (dot(V, N) * dot(L, N) <= 0.0);
-    return ret;
-}
-
-// 采样 BSDF（带 MIS 的完整实现）
+// ===============================================================================================
+// 3. SampleBSDF 函数实现 (加入 Clearcoat 采样分支)
+// ===============================================================================================
 bool SampleBSDF(
     float3 V,
     float3 N,
@@ -460,82 +451,128 @@ bool SampleBSDF(
 )
 {
     // 参数预处理
-    float alpha = max(0.001, mat.roughness * mat.roughness); // 防止除零
+    float roughness = max(0.001, mat.roughness);
+    float alpha = roughness * roughness;
     float metallic = mat.metallic;
     float ior = mat.ior;
     float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
     float transmission = mat.transmission;
-    float3 basecolor = mat.base_color;
+    float clearcoatRoughness = 0.2; // 固定的 Clearcoat 粗糙度
+    float alphaCC = clearcoatRoughness * clearcoatRoughness;
+
+    // Lobe 概率估计 (新增 Clearcoat)
+    float wSpec, wDiff, wTrans, wCC;
+    GetLobeWeight(V, N, metallic, transmission, eta, mat.clearcoat, clearcoatRoughness, wSpec, wDiff, wTrans, wCC);
     
-    // lobe概率估计
-    float wSpec;
-    float wDiff;
-    float wTrans;
-    GetLobeWeight(V, N, metallic, transmission, eta, wSpec, wDiff, wTrans);
+    // Normalize weights
+    float sumW = wDiff + wSpec + wTrans + wCC;
+    if (sumW < 1e-6)
+        return false; // 防止全黑材质无采样
     
-    //normalize
-    float sumW = wDiff + wSpec + wTrans;
     float pSpec = wSpec / sumW;
     float pDiff = wDiff / sumW;
     float pTrans = wTrans / sumW;
+    float pCC = wCC / sumW;
     
     float randLobe = next_rand(seed);
     
-    float3 L = float3(0.0f, 0.0f, 0.0f);
-    bool Debug = false;
-    float3 debugValue = N;
+    float3 L = float3(0, 0, 0);
+    bool sampled = false;
     
-    if (randLobe < pDiff)
+    // 概率区间: [0, pDiff) -> Diffuse
+    //           [pDiff, pDiff + pSpec) -> Base Specular
+    //           [pDiff + pSpec, pDiff + pSpec + pTrans) -> Transmission
+    //           [... , 1.0] -> Clearcoat
+    
+    float pAccum = pDiff;
+    
+    // --- 1. Sample Diffuse ---
+    if (randLobe < pAccum)
     {
         L = SampleCosineWeightedHemisphere(N, seed);
-        float k = 0.5; // 调整因子，根据需要调整
+        float k = 0.5;
         float theta = (PI / 2.0);
         payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
-
+        sampled = true;
     }
-    if (randLobe >= pDiff && randLobe < pDiff + pSpec)
+    
+    // --- 2. Sample Base Specular ---
+    if (!sampled)
     {
-        float3 H = SampleGGXVNDF(V, N, alpha, seed);
-        L = reflect(-V, H);
-        if (IsSameHemisphere(L, V, N) == false)
-            return false; // 无效采样
-        float k = 0; // 调整因子，根据需要调整
-        float theta = atan(2 * mat.roughness);
-        payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
-
-    }
-    if (randLobe >= pDiff + pSpec)
-    {
-        float3 H = SampleGGXVNDF(V, N, alpha, seed);
-        bool tir = refract(-V, H, eta, L);
-        if (tir)
+        pAccum += pSpec;
+        if (randLobe < pAccum)
         {
-            // 全内反射：转为镜面反射
+            float3 H = SampleGGXVNDF(V, N, alpha, seed);
             L = reflect(-V, H);
-            if (IsSameHemisphere(L, V, N) == false)
-                return false; // 反射方向无效
-            // 不增加 payload.angle，因为这是反射而非折射
-            
-            float k = 0.0;
-            float theta = atan(2.0 * mat.roughness);
-            payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
-        }
-        else
-        {
-            // 成功折射
-            if (IsSameHemisphere(L, V, N) == true)
-                return false; // 无效采样：折射应该在另一半球
-            
-            payload.angle *= eta;
-            
-            float k = 0.0;
-            float theta = atan(2.0 * mat.roughness);
-            payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+            if (IsSameHemisphere(L, V, N))
+            {
+                float k = 0.0;
+                float theta = atan(2.0 * roughness);
+                payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+                sampled = true;
+            }
         }
     }
     
+    // --- 3. Sample Transmission ---
+    if (!sampled)
+    {
+        pAccum += pTrans;
+        if (randLobe < pAccum)
+        {
+            float3 H = SampleGGXVNDF(V, N, alpha, seed);
+            bool tir = refract(-V, H, eta, L);
+            if (tir)
+            {
+                // 全内反射 -> 转为 Specular
+                L = reflect(-V, H);
+                if (IsSameHemisphere(L, V, N))
+                {
+                    float k = 0.0;
+                    float theta = atan(2.0 * roughness);
+                    payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+                    sampled = true;
+                }
+            }
+            else
+            {
+                // 折射
+                if (!IsSameHemisphere(L, V, N)) // 必须在异侧
+                {
+                    payload.angle *= eta;
+                    float k = 0.0;
+                    float theta = atan(2.0 * roughness);
+                    payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+                    sampled = true;
+                }
+            }
+        }
+    }
+    
+    // --- 4. Sample Clearcoat ---
+    if (!sampled)
+    {
+        // 剩下的概率区间归属于 Clearcoat
+        float3 H = SampleGGXVNDF(V, N, alphaCC, seed);
+        L = reflect(-V, H);
+        if (IsSameHemisphere(L, V, N))
+        {
+             // Clearcoat 通常比较光滑
+            float k = 0.0;
+            float theta = atan(2.0 * clearcoatRoughness);
+            payload.angle = max(sqrt(payload.angle * payload.angle + k * theta * theta), (PI / 2.0));
+            sampled = true;
+        }
+    }
+
+    if (!sampled)
+        return false;
+
     // 使用内部评估函数获取完整的 BSDF 和 PDF
-    ret = EvalBSDF_Internal(V, L, N, mat);
+    EvalBSDF(V, L, N, mat, ret.bsdf, ret.pdf);
+    
+    ret.isTransmission = (dot(V, N) * dot(L, N) <= 0.0);
+    ret.direction = L;
     
     // 验证结果
     if (ret.pdf < 1e-8 || length(ret.bsdf) < 1e-8)

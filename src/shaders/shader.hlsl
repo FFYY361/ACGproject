@@ -198,7 +198,7 @@ float3 get_target_direction(float2 pixel_center)
     
     // === 路径追踪主循环 ===
     // 限制最大反弹次数，玻璃球需要更多次数以支持多次折射
-    for (int bounce = 0; bounce < 8; bounce++)
+    for (int bounce = 0; bounce < 20; bounce++)
     {
         
         payload.hit = false;
@@ -332,18 +332,21 @@ float3 get_target_direction(float2 pixel_center)
                     // 使用新接口评估 BSDF
                     float3 bsdf_value;
                     float bsdf_pdf;
-                    EvalBSDFForNEE(V, L_dir, N, payload.material, bsdf_value, bsdf_pdf);
+                    EvalBSDF(V, L_dir, N, payload.material, bsdf_value, bsdf_pdf);
                     
                     float mis_direct = 1.0;
                     if (bsdf_pdf > 0.0001)
                         mis_direct = PowerHeuristic(light_pdf_solid, bsdf_pdf);
                     
                     directLightContrib += shadowPayload.shadow * mis_direct * throughput * bsdf_value * L_intensity * NdotL / light_pdf_solid;
+                   // directLightContrib = bsdf_value;
                 }
             }
         }
         //if (bounce == 1)
             //radiance += directLightContrib;
+        //break;
+        //radiance = directLightContrib;
         //break;
         radiance += directLightContrib;
         //break;

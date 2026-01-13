@@ -5,6 +5,11 @@
 #define LIGHT_TYPE_POINT 0
 #define LIGHT_TYPE_AREA  1
 
+// 简单的常量
+static const float PI = 3.14159265359f;
+static const float INV_PI = 0.3183098f;
+static const float EPS = 1e-5f;
+
 // ==================== 结构体定义 ====================
 struct CameraInfo
 {
@@ -34,8 +39,12 @@ struct Material
     float3 alpha;
     float roughness;
     float metallic;
+    float specular; // Specular intensity
     float transmission; // 0 = opaque, 1 = fully transparent
     float ior; // Index of refraction (e.g., 1.5 for glass)
+    float subsurface; // Subsurface scattering factor
+    float clearcoat; // Clearcoat layer intensity
+    float sheen; // Sheen intensity
     int texture_id; // -1 = no texture, >= 0 = texture index
     int normal_id;
     int use_vertex_color; // 0 = use base_color/texture, 1 = use vertex colors

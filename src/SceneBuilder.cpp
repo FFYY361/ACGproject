@@ -65,37 +65,38 @@ std::shared_ptr<Light> SceneBuilder::CreateAreaLight(
 
 void SceneBuilder::BuildCornellBoxHelper(Scene* scene, float box_size) {
     float wall_thickness = 0.01f;
+	float width = box_size * 2;
     // Floor (white)
     scene->AddEntity(CreateCube(
         glm::vec3(0.0f, -box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
+        glm::vec3(width, wall_thickness, box_size),
         Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
     ));
     
     // Ceiling (white)
     scene->AddEntity(CreateCube(
         glm::vec3(0.0f, box_size, 0.0f),
-        glm::vec3(box_size, wall_thickness, box_size),
+        glm::vec3(width, wall_thickness, box_size),
         Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
     ));
     
     // Back wall (white)
     scene->AddEntity(CreateCube(
         glm::vec3(0.0f, 0.0f, -box_size),
-        glm::vec3(box_size, box_size, wall_thickness),
+        glm::vec3(width, box_size, wall_thickness),
         Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
     ));
     
     // Left wall (red)
     scene->AddEntity(CreateCube(
-        glm::vec3(-box_size, 0.0f, 0.0f),
+        glm::vec3(-width, 0.0f, 0.0f),
         glm::vec3(wall_thickness, box_size, box_size),
         Material(glm::vec3(0.9f, 0.1f, 0.1f), 0.9f, 0.0f)
     ));
     
     // Right wall (green)
     scene->AddEntity(CreateCube(
-        glm::vec3(box_size, 0.0f, 0.0f),
+        glm::vec3(width, 0.0f, 0.0f),
         glm::vec3(wall_thickness, box_size, box_size),
         Material(glm::vec3(0.1f, 0.9f, 0.1f), 0.9f, 0.0f)
     ));
@@ -256,35 +257,220 @@ void SceneBuilder::BuildCornellBox(Scene* scene) {
 void SceneBuilder::BuildCornellBox2(Scene* scene) {
     scene->Clear();
     
-    float box_size = 2.0f;
+    float box_size = 3.0f;
+
+    float y_shift = 0.6f;
 
     // Circular disk area light on ceiling (using small square approximation)
-    float disk_radius = 0.8f;  // 增大光源尺寸
+    float disk_radius = 1.5f;  // 增大光源尺寸
     scene->AddLight(CreateAreaLight(
-        glm::vec3(0.0f, box_size - 0.15f, 0.0f),
-        glm::vec3(15.0f, 15.0f, 15.0f),
-        glm::vec3(disk_radius, 0.0f, 0.0f),  // u vector (x direction)
-        glm::vec3(0.0f, 0.0f, disk_radius)   // v vector (z direction)
+        glm::vec3(0.0f, 0.5f + y_shift, 5.5f),
+        glm::vec3(35.0f, 35.0f, 35.0f),
+        glm::vec3(0.0f, disk_radius, 0.0f),   // v vector (z direction)
+        glm::vec3(disk_radius, 0.0f, 0.0f)  // u vector (x direction)
+    ));
+    float wall_thickness = 0.01f;
+    float width = 4.5f;
+    int sphere_normal_idx = scene->AddTexture(PROJECT_DIR "/meshes/sphere_normal.png");
+	int cube_color_idx = scene->AddTexture(PROJECT_DIR "/meshes/cube_color.png");
+    // Floor (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, -box_size + y_shift, 0.0f),
+        glm::vec3(width, wall_thickness, box_size),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
     ));
 
-    BuildCornellBoxHelper(scene, box_size);
+    // Ceiling (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, box_size + y_shift, 0.0f),
+        glm::vec3(width, wall_thickness, box_size),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.9f, 0.0f)
+    ));
+
+    // Back wall (white)
+    scene->AddEntity(CreateCube(
+        glm::vec3(0.0f, 0.0f + y_shift, -box_size),
+        glm::vec3(width, box_size, wall_thickness),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.0f, 0.0f), cube_color_idx, -1,
+            0.9f, 0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0)
+    ));
+
+    // Left wall (red)
+    scene->AddEntity(CreateCube(
+        glm::vec3(-width, 0.0f + y_shift, 0.0f),
+        glm::vec3(wall_thickness, box_size, box_size),
+        Material(glm::vec3(0.9f, 0.1f, 0.1f), 0.9f, 0.0f)
+    ));
+
+    // Right wall (green)
+    scene->AddEntity(CreateCube(
+        glm::vec3(width, 0.0f + y_shift, 0.0f),
+        glm::vec3(wall_thickness, box_size, box_size),
+        Material(glm::vec3(0.1f, 0.9f, 0.1f), 0.9f, 0.0f)
+    ));
     
     // Metallic sphere (left side)
-    scene->AddEntity(CreateSphere(
-        glm::vec3(-0.6f, -1.3f, -0.3f),
-        0.7f,
-        Material(glm::vec3(0.95f, 0.95f, 0.95f), 0.05f, 1.0f, glm::vec3(0.0f), 0.0f, 1.5f)  // High metallic, low roughness
-    ));
-    
-    // Transparent/Glass sphere (right side) - with transmission
-    scene->AddEntity(CreateSphere(
-        glm::vec3(0.7f, -1.3f, 0.4f),
-        0.7f,
-        Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, 1.5f)  // Clear glass with no absorption
-    ));
-    
+    //scene->AddEntity(CreateSphere(
+    //    glm::vec3(-0.6f, -1.3f, -0.3f),
+    //    0.7f,
+    //    Material(glm::vec3(0.95f, 0.95f, 0.95f), 0.05f, 1.0f, glm::vec3(0.0f), 0.0f, 1.5f)  // High metallic, low roughness
+    //));
+    //
+    //// Transparent/Glass sphere (right side) - with transmission
+    //scene->AddEntity(CreateSphere(
+    //    glm::vec3(0.7f, -1.3f, 0.4f),
+    //    0.7f,
+    //    Material(glm::vec3(1.0f, 1.0f, 1.0f), 0.0f, 0.0f, glm::vec3(0.0f), 1.0f, 1.5f)  // Clear glass with no absorption
+    //));
+
+
+    float min = 0.0f, max = 1.0f;
+    float r = 0.35f;
+	float x = 0.0f, z = 0.0f, y_min = -box_size + r + 0.5 + y_shift, y_max = box_size - r - 1.0 + y_shift;
+	int N = 5;
+
+
+    // roughness
+	min = 0.1f; max = 1.0f; x = -3.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            value, 0.65f, 0.0f, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+	// metallic
+
+    min = 0.0f; max = 1.0f; x = -2.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.2f, value, 0.0f, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+    // specular
+	min = 1.1f; max = 2.5f; x = -1.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.2f, 0.0f, 0.0f, 0.0f, value, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+    // tramsmission
+    min = 0.2f; max = 1.0f; x = -0.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.99f, 0.99f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.03f, 0.0f, 0.0f, value, 1.1f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+    // ior
+    min = 1.1f; max = 2.4f; x = 0.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.99f, 0.99f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.03f, 0.0f, 0.0f, 1.0f, value, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+    // subsurface
+    min = 0.0f; max = 1.0f; x = 1.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.5f, 0.0f, 0.0f, 0.0f, 1.5f, value, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+	// clearcoat
+    min = 0.0f; max = 1.0f; x = 2.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.2f, 0.0f, 0.0f, 0.0f, 1.5f, 0.0f, value, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+    //sheen
+    min = 0.0f; max = 1.0f; x = 3.5f;
+    for (int i = 0; i < N; ++i) {
+        float value = min + (max - min) * i / (N - 1);
+        float y = y_min + (y_max - y_min) * i / (N - 1);
+        Material mat(
+            glm::vec3(0.7f, 0.7f, 0.99f), glm::vec3(0.0f, 0.0f, 0.0f), -1, sphere_normal_idx,
+            0.5f, 0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 0.0f, value,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0
+        );
+        scene->AddEntity(CreateSphere(
+            glm::vec3(x, y, z),
+            r,
+            mat
+        ));
+    }
+
+
     scene->BuildAccelerationStructures();
 }
+
 
 void SceneBuilder::BuildCornellBoxMesh(Scene* scene) {
     scene->Clear();
@@ -487,62 +673,46 @@ void SceneBuilder::BuildGlassTestScene(Scene* scene) {
 
 void SceneBuilder::BuildMaterialShowcase(Scene* scene) {
     scene->Clear();
-    
-    // Ground
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.0f, -0.5f, 0.0f),
-        glm::vec3(10.0f, 0.1f, 10.0f),
-        Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.9f, 0.0f)
-    ));
-    
-    // Back row: Roughness test (0.0 to 1.0)
-    for (int i = 0; i < 5; i++) {
-        float x = -4.0f + i * 2.0f;
-        float roughness = i / 4.0f;
-        
-        scene->AddEntity(CreateSphere(
-            glm::vec3(x, 0.5f, -2.0f),
-            0.5f,
-            Material(glm::vec3(1.0f, 1.0f, 1.0f), roughness, 0.0f)
-        ));
-    }
-    
-    // Front row: Metallic test (0.0 to 1.0)
-    for (int i = 0; i < 5; i++) {
-        float x = -4.0f + i * 2.0f;
-        float metallic = i / 4.0f;
-        
-        scene->AddEntity(CreateSphere(
-            glm::vec3(x, 0.5f, 2.0f),
-            0.5f,
-            Material(glm::vec3(1.0f, 0.8f, 0.2f), 0.2f, metallic)
-        ));
-    }
-    
-    // Colored spheres in the middle
-    scene->AddEntity(CreateSphere(
-        glm::vec3(-2.0f, 0.5f, 0.0f),
-        0.5f,
-        Material(glm::vec3(1.0f, 0.0f, 0.0f), 0.3f, 0.0f)  // Red
-    ));
-    
-    scene->AddEntity(CreateSphere(
-        glm::vec3(0.0f, 0.5f, 0.0f),
-        0.5f,
-        Material(glm::vec3(0.0f, 1.0f, 0.0f), 0.3f, 0.0f)  // Green
-    ));
-    
-    scene->AddEntity(CreateSphere(
-        glm::vec3(2.0f, 0.5f, 0.0f),
-        0.5f,
-        Material(glm::vec3(0.0f, 0.0f, 1.0f), 0.3f, 0.0f)  // Blue
-    ));
-    
-    // Light
+
+     //Light
     scene->AddLight(CreatePointLight(
-        glm::vec3(0.0f, 4.0f, 0.0f),
-        glm::vec3(20.0f, 20.0f, 20.0f)
+        glm::vec3(0.0f, 4.0f, -3.0f),
+        glm::vec3(50.0f, 50.0f, 50.0f)
     ));
+
+    /*scene->AddLight(CreateAreaLight(
+        glm::vec3(0.0f, 3.0f, 0.0f),
+        glm::vec3(50.0f, 50.0f, 50.0f),
+        glm::vec3(1.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 0.0f, 1.0f)
+	));*/
+
+    //int normal_sphere = scene->AddTexture(PROJECT_DIR "/meshes/sphere_normal.png");
+    //int mipmap_texture = scene->AddTexture(PROJECT_DIR "/meshes/cube_color.png");
+
+    // Ground
+ //   scene->AddEntity(CreateCube(
+ //       glm::vec3(0.0f, -0.5f, 0.0f),
+ //       glm::vec3(100.0f, 0.1f, 100.0f),
+ //       Material(glm::vec3(0.8f, 0.8f, 0.8f), 0.9f, 0.0f, glm::vec3(0.0f), 0.0f, 1.5f, -1, -1)
+ //   ));
+
+ //   int N = 3; //roughness
+	//int M = 3; //metallic
+
+ //   for (int i = 0; i < N; i++) {
+ //       for (int j = 0; j < M; j++) {
+ //           float roughness = (i + 0.1) / (float(N - 1) + 0.2);
+ //           float metallic = (j + 0.1) / (float(M - 1) + 0.2);
+ //           scene->AddEntity(CreateCube(
+ //               glm::vec3(-2.0f + j * 2.0f, 0.5f, -2.0f + i * 2.0f),
+ //               glm::vec3(0.5, 0.5, 0.2),
+ //               Material(glm::vec3(1.0f, 0.85f, 0.15f), 0.1, metallic, glm::vec3(0.0f), roughness, 1.5f, -1, -1)
+ //           ));
+ //       }
+	//}
+
+    
     
     scene->BuildAccelerationStructures();
 }

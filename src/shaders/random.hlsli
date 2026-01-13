@@ -1,9 +1,7 @@
 ﻿#ifndef RANDOM_HLSLI
 #define RANDOM_HLSLI
 
-// 简单的常量 PI
-static const float PI = 3.14159265359f;
-static const float EPS = 1e-5f;
+#include "common.hlsli"
 
 // PCG Hash 随机数生成器
 uint init_rand(uint val0, uint val1, uint backoff = 16)

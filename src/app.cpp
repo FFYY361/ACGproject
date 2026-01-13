@@ -229,12 +229,12 @@ void Application::OnInit() {
     // Build the scene using SceneBuilder
     // You can switch between different scenes by changing the function call:
     //SceneBuilder::BuildBedroomScene(scene_.get());
-    SceneBuilder::BuildBedroomSplitScene(scene_.get());
+    //SceneBuilder::BuildBedroomSplitScene(scene_.get());
     // SceneBuilder::BuildCornellBox(scene_.get());
     // SceneBuilder::BuildTestScene(scene_.get());
-    // SceneBuilder::BuildMaterialShowcase(scene_.get());
+     //SceneBuilder::BuildMaterialShowcase(scene_.get());
     // SceneBuilder::BuildMyCustomScene(scene_.get());
-    
+	SceneBuilder::BuildCornellBox2(scene_.get());
     //SceneBuilder::BuildDefaultScene(scene_.get());
 
     // Create film for accumulation
@@ -359,9 +359,9 @@ void Application::OnClose() {
 }
 
 void Application::UpdateHoveredEntity() {
-    hovered_entity_id_ = -1;
-    hovered_pixel_color_ = glm::vec4(0.0f);
-    return;
+    //hovered_entity_id_ = -1;
+    //hovered_pixel_color_ = glm::vec4(0.0f);
+    //return;
     // Only detect hover when camera is disabled (cursor visible)
     if (camera_enabled_) {
         hovered_entity_id_ = -1;
