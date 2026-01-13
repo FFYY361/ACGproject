@@ -1,6 +1,22 @@
 #include "common.hlsli"
 #include "random.hlsli"
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ===============================================================================================
 // 0. 结构体定义 (Required)
 // ===============================================================================================
@@ -259,12 +275,13 @@ float3 EvalSheen(float LdotH, float sheenIntensity, float3 baseColor)
 
 
 void GetLobeWeight(
-    float3 V, float3 N, float metallic, float transmission, float eta,
+    float3 V, float3 N, float metallic, float transmission, float3 eta_vec,
     float clearcoat, float clearcoatRoughness,
     out float w_spec, out float w_diff, out float w_trans, out float w_cc
 )
 {
     float NdotV = abs(dot(V, N));
+    float eta = (eta_vec.r + eta_vec.g + eta_vec.b) / 3.0;
     
     // 1. 计算 Clearcoat 权重 (假设 Clearcoat IOR = 1.5 -> F0 = 0.04)
     // Clearcoat 作为一个顶层，它的反射强度基于 Fresnel
@@ -305,7 +322,7 @@ void EvalBSDF(
     float roughness = max(0.001, mat.roughness);
     float alpha = roughness * roughness;
     float metallic = mat.metallic;
-    float ior = mat.ior;
+    float3 ior = mat.ior;
     float transmission = mat.transmission;
     float3 basecolor = mat.base_color;
     
@@ -321,14 +338,17 @@ void EvalBSDF(
     // 计算基础 F0 (考虑 Specular Intensity)
     // Dielectric F0 = ((ior-1)/(ior+1))^2. 
     // Specular 参数通常用于缩放这个 F0. (Disney: spec=0.5 -> IOR=1.5)
-    float f0_dielectric = pow((ior - 1.0) / (ior + 1.0), 2.0);
+    float ior_avg = (ior.r + ior.g + ior.b) / 3.0;
+    float f0_dielectric = pow((ior_avg - 1.0) / (ior_avg + 1.0), 2.0);
     // 重新映射: spec 0.5 对应标准 f0, spec 0 -> 0, spec 1 -> 2*f0
     float3 F0_dielectric_vec = float3(f0_dielectric, f0_dielectric, f0_dielectric);
     float3 F0 = lerp(F0_dielectric_vec, basecolor, metallic);
     
     
+    
+    
     float3 H;
-    float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
+    float eta = (dot(V, N) > 0.0) ? (1.0 / ior_avg) : ior_avg;
     
     if (isTransmission)
     {
@@ -454,21 +474,61 @@ bool SampleBSDF(
     float roughness = max(0.001, mat.roughness);
     float alpha = roughness * roughness;
     float metallic = mat.metallic;
-    float ior = mat.ior;
-    float eta = (dot(V, N) > 0.0) ? (1.0 / ior) : (ior / 1.0);
+    float3 ior = mat.ior; // 使用float3保留色散信息
     float transmission = mat.transmission;
     float clearcoatRoughness = 0.2; // 固定的 Clearcoat 粗糙度
     float alphaCC = clearcoatRoughness * clearcoatRoughness;
 
+    
+    // ========== 色散功能（使用固定波长通道） ==========
+    // 检查当前材质是否有色散（IOR的RGB分量不同）
+    bool has_dispersion = (abs(ior.r - ior.g) > 0.01 || abs(ior.g - ior.b) > 0.01);
+    
+    // 选择IOR：使用payload中固定的波长通道
+    float ior_scalar;
+    float3 eta_vec;  // 用于GetLobeWeight的向量
+    
+    if (has_dispersion && transmission > 0.01 )
+    {
+        int channel;
+        if (payload.wavelength_channel >= 0) {
+            channel = payload.wavelength_channel;
+        } else {
+            // 随机选择一个通道
+            float randVal = next_rand(seed);
+            if (randVal < 1.0 / 3.0)
+                channel = 0; // 红色通道
+            else if (randVal < 2.0 / 3.0)
+                channel = 1; // 绿色通道
+            else
+                channel = 2; // 蓝色通道
+            payload.wavelength_channel = channel; // 存储选择的通道
+        }
+        // 有色散的透射材质：使用固定的波长通道（从payload获取）
+        if (channel == 0)
+            ior_scalar = ior.r;
+        else if (channel == 1)
+            ior_scalar = ior.g;
+        else if (channel == 2)
+            ior_scalar = ior.b;
+        
+        eta_vec = (dot(V, N) > 0.0) ? (1.0 / ior) : ior;  // 使用完整的色散IOR向量
+    }
+    else
+    {
+        // 无色散或非透射：使用平均IOR
+        ior_scalar = (ior.r + ior.g + ior.b) / 3.0;
+        float eta_s = (dot(V, N) > 0.0) ? (1.0 / ior_scalar) : ior_scalar;
+        eta_vec = float3(eta_s, eta_s, eta_s);  // 统一的IOR向量
+    }
+    // ========== 色散功能结束 ==========
+    
+    float eta = (dot(V, N) > 0.0) ? (1.0 / ior_scalar) : ior_scalar;
     // Lobe 概率估计 (新增 Clearcoat)
     float wSpec, wDiff, wTrans, wCC;
-    GetLobeWeight(V, N, metallic, transmission, eta, mat.clearcoat, clearcoatRoughness, wSpec, wDiff, wTrans, wCC);
+    GetLobeWeight(V, N, metallic, transmission, eta_vec, mat.clearcoat, clearcoatRoughness, wSpec, wDiff, wTrans, wCC);
     
-    // Normalize weights
-    float sumW = wDiff + wSpec + wTrans + wCC;
-    if (sumW < 1e-6)
-        return false; // 防止全黑材质无采样
-    
+    float sumW = wSpec + wDiff + wTrans + wCC;
     float pSpec = wSpec / sumW;
     float pDiff = wDiff / sumW;
     float pTrans = wTrans / sumW;

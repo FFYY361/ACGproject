@@ -40,6 +40,7 @@ public:
     grassland::graphics::Buffer* GetMaterialIdBuffer() const { return material_id_buffer_.get(); }
     const Material& GetMaterial() const { return material_; }  // Returns first material for backward compatibility
     const std::vector<Material>& GetMaterials() const { return materials_; }
+    std::vector<Material>& GetMaterials() { return materials_; }  // Non-const version for modification
     const std::vector<SubMesh>& GetSubMeshes() const { return submeshes_; }
     const glm::mat4& GetTransform() const { return transform_; }
     grassland::graphics::AccelerationStructure* GetBLAS() const { return blas_.get(); }

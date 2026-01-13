@@ -1,74 +1,148 @@
-﻿#pragma once
-#include "long_march.h"
+﻿#ifndef MATERIAL_H
+#define MATERIAL_H
 
-// Simple material structure for ray tracing
 struct Material {
-    glm::vec3 base_color;
-    glm::vec3 emission;
-    glm::vec3 alpha;
-    float roughness;
-    float metallic;
-	float specular;    // Specular intensity
-    float transmission;  // 0 = opaque, 1 = fully transparent
-    float ior;           // Index of refraction (e.g., 1.5 for glass)
-	float subsurface;   // Subsurface scattering factor
-	float clearcoat;    // Clearcoat layer intensity
-	float sheen;       // Sheen intensity
-    int texture_id;      // -1 = no texture, >= 0 = texture index
-    int normal_id;
-    int use_vertex_color;  // 0 = use base_color/texture, 1 = use vertex colors
+    glm::vec3 base_color = glm::vec3(0.8f);
+    glm::vec3 emission = glm::vec3(0.0f);
+    glm::vec3 alpha = glm::vec3(1.0f);
 
-    Material()
-        : base_color(0.8f, 0.8f, 0.8f)
-        , roughness(0.5f)
-        , metallic(0.0f)
-        , emission(0.0f, 0.0f, 0.0f)
-        , transmission(0.0f)
-        , ior(1.5f)
-        , texture_id(-1)
-        , normal_id(-1)
-        , use_vertex_color(0)
-        , alpha(0.0f, 0.0f, 0.0f) {}
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+    float specular = 0.0f;
+    float transmission = 0.0f;
 
-    Material(const glm::vec3& color, float rough = 0.5f, float metal = 0.0f, 
-             const glm::vec3& emis = glm::vec3(0.0f, 0.0f, 0.0f), 
-             float trans = 0.0f, float index_of_refraction = 1.5f, int tex_id = -1, int normal_id = -1,
-             const glm::vec3& alpha = glm::vec3(1.0f, 1.0f, 1.0f))
-        : base_color(color)
-        , roughness(rough)
-        , metallic(metal)
-        , emission(emis)
-        , transmission(trans)
-        , ior(index_of_refraction)
-        , texture_id(tex_id) 
-        , normal_id(normal_id)
-        , use_vertex_color(0)
-        , alpha(alpha)
-		, subsurface(0.0f)
-		, clearcoat(0.0f)
-		, sheen(0.0f)
-		, specular(0.0f) {}
+    glm::vec3 ior = glm::vec3(1.5f);
 
+    float subsurface = 0.0f;
+    float clearcoat = 0.0f;
+    float sheen = 0.0f;
+
+    int texture_id = -1;
+    int normal_id = -1;
+    int use_vertex_color = 0;
+    int use_toon = 0;
+
+    // Volume
+    glm::vec3 volume_emission = glm::vec3(0.0f);
+    glm::vec3 volume_absorption = glm::vec3(0.0f);
+    glm::vec3 volume_scattering = glm::vec3(0.0f);
+    float volume_density = 0.0f;
+    float volume_anisotropy = 0.0f;
+
+    // =========================
+    // Master Constructor
+    // =========================
     Material(
-        const glm::vec3& color, const glm::vec3& emission, const int texture_id, const int normal_id,
-		float roughness = 0.5f, float metallic = 0.0f, float specular = 0.0f, float transmission = 0.0f,
-		float ior = 1.5f, float subsurface = 0.0f, float clearcoat = 0.0f, float sheen = 0.0f,
-		const glm::vec3& alpha = glm::vec3(1.0f, 1.0f, 1.0f), int use_vertex_color = 0
+        const glm::vec3& color,
+        const glm::vec3& emission_,
+        const glm::vec3& alpha_,
+        float roughness_,
+        float metallic_,
+        float specular_,
+        float transmission_,
+        const glm::vec3& ior_,
+        float subsurface_,
+        float clearcoat_,
+        float sheen_,
+        int texture_id_,
+        int normal_id_,
+        int use_vertex_color_,
+        int use_toon_
     )
-        : base_color(color)
-        , emission(emission)
-        , roughness(roughness)
-		, metallic(metallic)
-        , specular(specular)
-        , transmission(transmission)
-		, ior(ior)
-		, subsurface(subsurface)
-		, clearcoat(clearcoat)
-        , sheen(sheen)
-        , texture_id(texture_id)
-        , normal_id(normal_id)
-        , use_vertex_color(use_vertex_color)
-		, alpha(alpha) {}
-        
+        : base_color(color),
+        emission(emission_),
+        alpha(alpha_),
+        roughness(roughness_),
+        metallic(metallic_),
+        specular(specular_),
+        transmission(transmission_),
+        ior(ior_),
+        subsurface(subsurface_),
+        clearcoat(clearcoat_),
+        sheen(sheen_),
+        texture_id(texture_id_),
+        normal_id(normal_id_),
+        use_vertex_color(use_vertex_color_),
+        use_toon(use_toon_)
+    {
+    }
+
+    // =========================
+    // Default
+    // =========================
+    Material()
+        : Material(glm::vec3(0.8f), glm::vec3(0.0f), glm::vec3(1.0f),
+            0.5f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.5f),
+            0.0f, 0.0f, 0.0f,
+            -1, -1, 0, 0)
+    {
+    }
+
+    // =========================
+    // Your original interfaces
+    // =========================
+
+    // vec3 IOR
+    Material(const glm::vec3& color, float rough, float metal,
+        const glm::vec3& emis, float trans,
+        const glm::vec3& ior_vec,
+        int tex = -1, int norm = -1,
+        const glm::vec3& alpha_in = glm::vec3(1.0f))
+        : Material(color, emis, alpha_in,
+            rough, metal, 0.0f, trans,
+            ior_vec,
+            0.0f, 0.0f, 0.0f,
+            tex, norm, 0, 0)
+    {
+    }
+
+    // float IOR compatibility
+    Material(const glm::vec3& color, float rough, float metal,
+        const glm::vec3& emis, float trans,
+        float ior_scalar,
+        int tex = -1, int norm = -1,
+        const glm::vec3& alpha_in = glm::vec3(1.0f))
+        : Material(color, emis, alpha_in,
+            rough, metal, 0.0f, trans,
+            glm::vec3(ior_scalar),
+            0.0f, 0.0f, 0.0f,
+            tex, norm, 0, 0)
+    {
+    }
+
+    // No emission shortcut
+    Material(const glm::vec3& color, float rough, float metal)
+        : Material(color, glm::vec3(0.0f), glm::vec3(1.0f),
+            rough, metal, 0.0f, 0.0f,
+            glm::vec3(1.5f),
+            0.0f, 0.0f, 0.0f,
+            -1, -1, 0, 0)
+    {
+    }
+
+    // Your "texture workflow" constructor
+    Material(const glm::vec3& color,
+        const glm::vec3& emission_,
+        int texture_id_, int normal_id_,
+        float roughness_ = 0.5f,
+        float metallic_ = 0.0f,
+        float specular_ = 0.0f,
+        float transmission_ = 0.0f,
+        float ior_scalar = 1.5f,
+        float subsurface_ = 0.0f,
+        float clearcoat_ = 0.0f,
+        float sheen_ = 0.0f,
+        const glm::vec3& alpha_ = glm::vec3(1.0f),
+        int use_vertex_color_ = 0)
+        : Material(color, emission_, alpha_,
+            roughness_, metallic_, specular_, transmission_,
+            glm::vec3(ior_scalar),
+            subsurface_, clearcoat_, sheen_,
+            texture_id_, normal_id_,
+            use_vertex_color_, 0)
+    {
+    }
 };
 
+#endif // MATERIAL_H

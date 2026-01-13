@@ -36,11 +36,17 @@ public:
     // Build the default demo scene
     static void BuildDefaultScene(Scene* scene);
     
+    // Build a cartoon/toon shading demo scene
+    static void BuildToonScene(Scene* scene);
+    
+    // Build a cartoon bedroom scene
+    static void BuildToonBedroomScene(Scene* scene);
+    
+    // Build a scene showcasing volumetric emission
+    static void BuildVolumeScene(Scene* scene);
+    
     // Build a scene showcasing different materials
     static void BuildMaterialShowcase(Scene* scene);
-    
-    // Build a simple motion test scene with moving sphere/cube
-    static void BuildMotionTestScene(Scene* scene);
     
 private:
     static void BuildCornellBoxHelper(Scene* scene, float box_size = 2.0f);

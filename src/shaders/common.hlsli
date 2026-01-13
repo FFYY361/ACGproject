@@ -1,6 +1,9 @@
 ﻿#ifndef COMMON_HLSLI
 #define COMMON_HLSLI
 
+// static const float PI = 3.14159265359f;
+// static const float EPS = 1e-5f;
+
 // 定义光源类型
 #define LIGHT_TYPE_POINT 0
 #define LIGHT_TYPE_AREA  1
@@ -41,14 +44,71 @@ struct Material
     float metallic;
     float specular; // Specular intensity
     float transmission; // 0 = opaque, 1 = fully transparent
-    float ior; // Index of refraction (e.g., 1.5 for glass)
+    float3 ior; // Index of refraction (e.g., 1.5 for glass)
     float subsurface; // Subsurface scattering factor
     float clearcoat; // Clearcoat layer intensity
     float sheen; // Sheen intensity
     int texture_id; // -1 = no texture, >= 0 = texture index
     int normal_id;
     int use_vertex_color; // 0 = use base_color/texture, 1 = use vertex colors
+    int use_toon; // 0 = PBR shading, 1 = Toon/Cel shading
+    
+    // Volume properties
+    float3 volume_emission; // Volumetric emission (e.g., glowing fog)
+    float3 volume_absorption; // Absorption coefficient (sigma_a)
+    float3 volume_scattering; // Scattering coefficient (sigma_s)
+    float volume_density; // Density multiplier
+    float volume_anisotropy; // Phase function anisotropy parameter g [-1,1]
 };
+
+// Volume rendering helper: compute transmittance
+float3 VolumeTransmittance(float3 sigma_t, float distance)
+{
+    return exp(-sigma_t * distance);
+}
+
+// Henyey-Greenstein Phase Function
+// g: anisotropy parameter [-1, 1]
+//    g = 0: isotropic scattering (uniform in all directions)
+//    g > 0: forward scattering (more likely to continue in same direction)
+//    g < 0: backward scattering (more likely to scatter backwards)
+// cosTheta: dot(wi, wo) where wi is incoming direction, wo is outgoing direction
+float HenyeyGreensteinPhase(float g, float cosTheta)
+{
+    float denom = 1.0 + g * g - 2.0 * g * cosTheta;
+    return (1.0 / (4.0 * PI)) * (1.0 - g * g) / (denom * sqrt(denom));
+}
+
+// Sample direction from Henyey-Greenstein phase function
+// Returns sampled direction in world space
+// wi: incident direction (normalized)
+// g: anisotropy parameter
+// u1, u2: random numbers in [0,1]
+float3 SampleHenyeyGreenstein(float3 wi, float g, float u1, float u2)
+{
+    float cosTheta;
+    
+    if (abs(g) < 0.001) {
+        // Isotropic case
+        cosTheta = 1.0 - 2.0 * u1;
+    } else {
+        // Anisotropic case
+        float sqr = (1.0 - g * g) / (1.0 - g + 2.0 * g * u1);
+        cosTheta = (1.0 + g * g - sqr * sqr) / (2.0 * g);
+    }
+    
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    float phi = 2.0 * PI * u2;
+    
+    // Build coordinate system around wi
+    float3 w = wi;
+    float3 up = abs(w.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 u = normalize(cross(up, w));
+    float3 v = cross(w, u);
+    
+    // Sample direction in local coordinates, then transform to world
+    return sinTheta * cos(phi) * u + sinTheta * sin(phi) * v + cosTheta * w;
+}
 
 struct EntityInfo
 {
@@ -89,6 +149,7 @@ struct RayPayload
     float3 position; // 世界坐标位置
     float3 normal; // 世界坐标法线
     Material material; // 击中点的材质信息
+    float hit_distance; // Distance to hit point (for volume rendering)
     float3 debug;
     float angle; // 光锥角度
     float width; // 光锥宽度
@@ -97,6 +158,7 @@ struct RayPayload
     float3 dDdX;
     float3 dDdY;
     float time; // ray time for motion blur
+    int wavelength_channel; // 0=R, 1=G, 2=B for dispersion, -1=not set
 };
 
 struct Light

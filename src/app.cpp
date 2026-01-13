@@ -424,7 +424,7 @@ void Application::OnUpdate() {
         if (pending_scene_index_ >= 0 && pending_scene_index_ != current_scene_index_) {
             const char* scene_names[] = {
                 "Default Scene", "Cornell Box", "Cornell Box 2", "Glass Test",
-                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene", "Bedroom split", "Motion Test"
+                "Material Showcase", "Cornell Box 3", "Cornell Box 4", "Procedural Scene", "Bedroom Scene", "Bedroom split", "Toon Scene", "Toon Bedroom", "Volume Scene"
             };
             
             grassland::LogInfo("Switching to scene: {}", scene_names[pending_scene_index_]);
@@ -442,8 +442,10 @@ void Application::OnUpdate() {
                 case 6: SceneBuilder::BuildCornellBox4(scene_.get()); break;
                 case 7: SceneBuilder::BuildProceduralScene(scene_.get()); break;
                 case 8: SceneBuilder::BuildBedroomScene(scene_.get()); break;
-                case 9: SceneBuilder::BuildBedroomSplitScene(scene_.get()); break; 
-                case 10: SceneBuilder::BuildMotionTestScene(scene_.get()); break;
+                case 9: SceneBuilder::BuildBedroomSplitScene(scene_.get()); break;
+                case 10: SceneBuilder::BuildToonScene(scene_.get()); break;
+                case 11: SceneBuilder::BuildToonBedroomScene(scene_.get()); break;
+                case 12: SceneBuilder::BuildVolumeScene(scene_.get()); break;
             }
             
             // Wait for scene rebuild to complete
@@ -454,6 +456,11 @@ void Application::OnUpdate() {
             
             // Wait for film reset to complete
             // core_->WaitGPU();
+            
+            // Reset camera previous transform to avoid motion blur artifacts
+            CameraObject reset_camera{};
+            reset_camera.camera_to_world = glm::inverse(glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_));
+            last_camera_to_world_ = reset_camera.camera_to_world;
             
             selected_entity_id_ = -1;
             hovered_entity_id_ = -1;
@@ -514,30 +521,6 @@ void Application::OnUpdate() {
         camera_object.focusDist = focus_distance_;
         camera_object_buffer_->UploadData(&camera_object, sizeof(CameraObject));
         last_camera_to_world_ = camera_object.camera_to_world;
-
-
-        // Optional: Animate entities
-        // Animate entities for Motion Test scene
-        if (current_scene_index_ == 9) {
-            auto entities = scene_->GetEntities();
-            if (entities.size() >= 4) {
-                float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - start_time_).count();
-                // moving sphere (entity index 2)
-                glm::mat4 T_sphere = glm::translate(glm::mat4(1.0f), glm::vec3(sin(t) * 1.0f, -0.5f, -2.0f + cos(t) * 0.3f));
-                T_sphere = glm::scale(T_sphere, glm::vec3(0.5f));
-                entities[2]->SetTransform(T_sphere);
-
-                // moving cube (entity index 3)
-                glm::mat4 R = glm::rotate(glm::mat4(1.0f), t, glm::vec3(0.0f, 1.0f, 0.0f));
-                glm::mat4 T_cube = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f + sin(t) * 0.5f, -0.5f, -2.0f));
-                T_cube = T_cube * R;
-                T_cube = glm::scale(T_cube, glm::vec3(0.8f));
-                entities[3]->SetTransform(T_cube);
-
-                scene_->UpdateInstances();
-                film_->Reset();
-            }
-        }
     }
 }
 
@@ -954,7 +937,9 @@ void Application::RenderSceneSelector() {
         "Procedural Scene",
         "Bedroom Scene",
         "Bedroom Split",
-        "Motion Test"
+        "Toon Scene",
+        "Toon Bedroom",
+        "Volume Scene"
     };
     
     ImGui::Text("Select Scene:");
