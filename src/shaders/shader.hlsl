@@ -209,6 +209,8 @@ float3 get_target_direction(float2 pixel_center)
     payload.time = time;
     
     // 为色散随机选择一个波长通道（R=0, G=1, B=2）
+    // DISPERSION DISABLED
+    /*
     float rand_wave = next_rand(seed);
     if (rand_wave < 0.333)
         payload.wavelength_channel = 0;
@@ -216,6 +218,7 @@ float3 get_target_direction(float2 pixel_center)
         payload.wavelength_channel = 1;
     else
         payload.wavelength_channel = 2;
+    */
     payload.wavelength_channel = -1;
     
     // === 路径追踪主循环 ===
@@ -682,9 +685,10 @@ float3 get_target_direction(float2 pixel_center)
         if (bounce > 4)
         {
             float p = max(throughput.x, max(throughput.y, throughput.z));
+            p = clamp(p, 0.05, 0.95);
             if (next_rand(seed) > p)
-                break; // 终止
-            throughput /= p; // 能量补偿
+                break;
+            throughput /= p;
         }
     } // 路径追踪主循环结束
     

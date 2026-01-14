@@ -521,6 +521,10 @@ bool SampleBSDF(
         float eta_s = (dot(V, N) > 0.0) ? (1.0 / ior_scalar) : ior_scalar;
         eta_vec = float3(eta_s, eta_s, eta_s);  // 统一的IOR向量
     }
+    // // 无色散：直接使用平均IOR
+    // float ior_scalar = (ior.r + ior.g + ior.b) / 3.0;
+    // float eta_s = (dot(V, N) > 0.0) ? (1.0 / ior_scalar) : ior_scalar;
+    // float3 eta_vec = float3(eta_s, eta_s, eta_s);
     // ========== 色散功能结束 ==========
     
     float eta = (dot(V, N) > 0.0) ? (1.0 / ior_scalar) : ior_scalar;

@@ -229,7 +229,7 @@ void Application::OnInit() {
     // Build the scene using SceneBuilder
     // You can switch between different scenes by changing the function call:
     //SceneBuilder::BuildBedroomScene(scene_.get());
-    //SceneBuilder::BuildBedroomSplitScene(scene_.get());
+    // SceneBuilder::BuildBedroomSplitScene(scene_.get());
     // SceneBuilder::BuildCornellBox(scene_.get());
     // SceneBuilder::BuildTestScene(scene_.get());
      //SceneBuilder::BuildMaterialShowcase(scene_.get());
