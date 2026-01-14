@@ -241,38 +241,15 @@ void SceneBuilder::BuildDefaultScene(Scene* scene) {
 void SceneBuilder::BuildCornellBox(Scene* scene) {
     scene->Clear();
     
-    float box_size = 1.5f;
 
-    BuildCornellBoxHelper(scene, box_size);
-
-    // Point light in the top corner
-    auto light = std::make_shared<Light>(
-        0,  // type: 0 = Point light
-        glm::vec3(box_size * 0.8f, box_size * 0.9f, -box_size * 0.8f),  // 右上后角落
-        glm::vec3(10.0f, 10.0f, 10.0f)
-    );
-    scene->AddLight(light);
-    
-    // Tall box (white)
+	int cube_color_idx = scene->AddTexture(PROJECT_DIR "/meshes/mipmap_big.png");
     scene->AddEntity(CreateCube(
-        glm::vec3(-0.5f, -1.0f, -0.5f),
-        glm::vec3(0.6f, 1.0f, 0.6f),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f)
-    ));
-    
-    // Short box (white)
-    scene->AddEntity(CreateCube(
-        glm::vec3(0.6f, -1.5f, 0.3f),
-        glm::vec3(0.6f, 0.5f, 0.6f),
-        Material(glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f)
-    ));
-    
-    // Ceiling light
-    /*scene->AddEntity(CreateLight(
-        glm::vec3(0.0f, box_size - 0.15f, 0.0f),
-        glm::vec3(15.0f, 15.0f, 15.0f),
-        glm::vec3(0.5f, 0.05f, 0.5f)
-    ));*/
+        glm::vec3(0.0f, -2.0f, 0.0f),
+        glm::vec3(50.0f, 0.01f, 50.0f),
+        Material(glm::vec3(0.9f, 0.9f, 0.9f), glm::vec3(0.0f, 0.0f, 0.0f), cube_color_idx, -1,
+            0.9f, 0.0f, 0.0f, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f,
+            glm::vec3(1.0f, 1.0f, 1.0f), 0)
+	));
 
     
     scene->BuildAccelerationStructures();

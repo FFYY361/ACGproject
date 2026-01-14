@@ -234,7 +234,7 @@ void Application::OnInit() {
     // SceneBuilder::BuildTestScene(scene_.get());
      //SceneBuilder::BuildMaterialShowcase(scene_.get());
     // SceneBuilder::BuildMyCustomScene(scene_.get());
-	// SceneBuilder::BuildCornellBox2(scene_.get());
+	//SceneBuilder::BuildCornellBox2(scene_.get());
     SceneBuilder::BuildDefaultScene(scene_.get());
 
     // Create film for accumulation

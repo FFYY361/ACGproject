@@ -492,6 +492,10 @@ int Scene::AddTexture(const std::string& file_path) {
 	texture_infos_.push_back(tex_info);
 
     for (int level = 0; level < miplevels; ++level) {
+
+		char filename[64];
+	    snprintf(filename, sizeof(filename), "mipmap_level%d.png", level);
+        stbi_write_png(filename, curW, curH, 4, curData, curW * 4);
         // 1. 创建并上传 GPU 纹理
         std::unique_ptr<grassland::graphics::Image> texture;
         core_->CreateImage(curW, curH, grassland::graphics::IMAGE_FORMAT_R8G8B8A8_UNORM, &texture);

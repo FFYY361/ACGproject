@@ -73,6 +73,7 @@ float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 norm
     Texture2D tex = textures[NonUniformResourceIndex(text_idx)];
     uint twidth, theight, numlevel;
     tex.GetDimensions(0, twidth, theight, numlevel);
+    numlevel = info.mipLevels;
     
     float resolution = (float) max(twidth, theight);
 
@@ -92,31 +93,13 @@ float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 norm
     //return mip_level;
     // 4. 边界处理
     mip_level = clamp(mip_level, 0.0, (float) (numlevel - 1));
+    //mip_level = 0;
     text_idx += (int) mip_level;
     tex = textures[NonUniformResourceIndex(text_idx)];
-    //texture = textures[NonUniformResourceIndex(text_idx)];
     return tex.SampleLevel(textureSampler, uv, 0).rgb;
+    tex.GetDimensions(0, twidth, theight, numlevel);
+    return float3(resolution, spread_width, uv_per_world_unit);
 }
-
-// float3 MipMapSample(int idx, float2 uv, float width, float3 ray_dir, float3 normal)
-// {
-//     int base_idx = texture_infos[idx].idx; // index of mip level 0 in textures_ array
-//     // Query base level dimensions
-//     uint twidth, theight, numlevel;
-//     textures[NonUniformResourceIndex(base_idx)].GetDimensions(0, twidth, theight, numlevel);
-//     uint resolution = max(twidth, theight);
-//     float area_uv = 1.0; // 假设整个纹理覆盖面积为1
-//     float area_pos = width * width; // 近似为正方形区域
-//     // float area_uv = 1.0; // assume whole texture covers area 1
-//     // float area_pos = max(width * width, 1e-6); // avoid div by zero
-//     float texel_size = sqrt(area_uv / area_pos);
-//     float mip_level = log2(max(1.0, (float)resolution * texel_size)) - log2(abs(dot(ray_dir, normal)) + EPS);
-//     mip_level = clamp(mip_level, 0.0, (float) (texture_infos[idx].mipLevels - 1));
-//     int mip = (int) floor(mip_level + 0.5);
-//     int final_idx = base_idx + mip;
-//     Texture2D texture = textures[NonUniformResourceIndex(final_idx)];
-//     return texture.SampleLevel(textureSampler, uv, 0).rgb;
-// }
 
 
 float3 get_target_direction(float2 pixel_center)
@@ -745,7 +728,7 @@ float3 get_target_direction(float2 pixel_center)
     else
     {
         // Use black background if no environment map
-        mat.base_color = float3(0.0, 0.0, 0.0);
+        mat.base_color = float3(0.6, 0.6, 0.6);
         mat.emission = float3(0.0, 0.0, 0.0);
     }
     
@@ -937,8 +920,14 @@ void AnyHitMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 world_normal_ = normalize(mul((float3x3) objectToWorld_t, face_normal_));
     
     // calc uv scale
+    float4 pos0_ = mul(objectToWorld_t, float4(v0.pos, 1.0f));
+    float3 pos0 = float3(pos0_[0], pos0_[1], pos0_[2]);
+    float4 pos1_ = mul(objectToWorld_t, float4(v1.pos, 1.0f));
+    float3 pos1 = float3(pos1_[0], pos1_[1], pos1_[2]);
+    float4 pos2_ = mul(objectToWorld_t, float4(v2.pos, 1.0f));
+    float3 pos2 = float3(pos2_[0], pos2_[1], pos2_[2]);
     float area_uv = length(cross(float3(v1.uv - v0.uv, 0), float3(v2.uv - v0.uv, 0))) * 0.5;
-    float area_3d = length(cross(v1.pos - v0.pos, v2.pos - v0.pos)) * 0.5;
+    float area_3d = length(cross(pos1 - pos0, pos2 - pos0)) * 0.5;
     float uv_scale = sqrt(area_uv / area_3d);
     
     
