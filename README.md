@@ -1,15 +1,6 @@
-# Notification
+# ACG Projoect by Feiyang Xue and Boyan Pu
 
-- 创建颜色贴图和法线贴图时，需要严格注意坐标系的转换关系，在这个项目的坐标系中，x向右，y向上，z向后（右手系）。在blender中，x向右，y向前，z向上（右手系）。
-生成贴图时要特别注意。另外，blender的UV坐标（左下角原点）和本项目的UV坐标（右上角原点）y轴是相反的，因此生成贴图后需要注意是否需要翻转y轴。
-
-- 实现Mipmap的时候本来想用Ray diffrential，但是太难了最后破产了，现在用的是cones tracing，而且很多公式是AI给的，
-但是也没翻到讲的很好的文章，感觉后面可以再看看，实在不行也能糊弄一下。因为grassland::image不支持mipmap，所以自己用info的方式
-实现的mipmap，就是AddTexture里面手动生成很多个level的图一块塞进textures，然后info存开始的index。
-
-
-
-
+We choose **rendering** track and complete this report based on *shortmarch*. Below is the original README of *shortmarch*.
 
 # ShortMarch
 
