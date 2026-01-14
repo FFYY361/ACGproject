@@ -115,6 +115,11 @@ private:
     int num_texture_;
     std::vector<TextureInfo> texture_infos_;
     std::unique_ptr<grassland::graphics::Buffer> texture_info_buffer_;
+    
+    // Environment map (HDR skybox)
+    std::unique_ptr<grassland::graphics::Image> environment_map_;
+    bool has_environment_map_ = false;
+    float environment_intensity_ = 1.0f;
 
 public:
     // Texture management
@@ -123,6 +128,13 @@ public:
     grassland::graphics::Image* GetTexture(int index) const;
     size_t GetTextureCount() const { return textures_.size(); }
     grassland::graphics::Sampler* GetTextureSampler() const { return texture_sampler_.get(); }
+    
+    // Environment map
+    bool LoadEnvironmentMap(const std::string& file_path);
+    grassland::graphics::Image* GetEnvironmentMap() const { return environment_map_.get(); }
+    bool HasEnvironmentMap() const { return has_environment_map_; }
+    float GetEnvironmentIntensity() const { return environment_intensity_; }
+    void SetEnvironmentIntensity(float intensity) { environment_intensity_ = intensity; }
 
 private:
 };

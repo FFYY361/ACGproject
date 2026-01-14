@@ -35,6 +35,14 @@ struct LightInfo
     int num_light;
 };
 
+struct EnvironmentInfo
+{
+    int has_environment_map;    // 0 = no environment map, 1 = has environment map
+    float environment_intensity; // Intensity multiplier for environment lighting
+    float padding1;             // Padding for alignment
+    float padding2;
+};
+
 struct Material
 {
     float3 base_color;
@@ -192,7 +200,8 @@ Texture2D textures[] : register(t0, space13);  // Bindless texture array
 SamplerState textureSampler : register(s0, space14);
 StructuredBuffer<TextureInfo> texture_infos : register(t0, space15);
 StructuredBuffer<uint> material_ids : register(t0, space16);  // Per-triangle material IDs
-
+Texture2D environment_map : register(t0, space17);  // HDR environment map
+ConstantBuffer<EnvironmentInfo> environment_info : register(b0, space18);  // Environment map info
 
 
 Texture2D textures_real[];

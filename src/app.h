@@ -46,6 +46,9 @@ private:
     // Camera
     std::unique_ptr<grassland::graphics::Buffer> camera_object_buffer_;
     
+    // Environment map
+    std::unique_ptr<grassland::graphics::Buffer> environment_info_buffer_;
+    
     // Hover info buffer
     struct HoverInfo {
         int hovered_entity_id;

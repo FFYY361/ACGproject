@@ -234,13 +234,28 @@ void Application::OnInit() {
     // SceneBuilder::BuildTestScene(scene_.get());
      //SceneBuilder::BuildMaterialShowcase(scene_.get());
     // SceneBuilder::BuildMyCustomScene(scene_.get());
-	SceneBuilder::BuildCornellBox2(scene_.get());
-    //SceneBuilder::BuildDefaultScene(scene_.get());
+	// SceneBuilder::BuildCornellBox2(scene_.get());
+    SceneBuilder::BuildDefaultScene(scene_.get());
 
     // Create film for accumulation
     film_ = std::make_unique<Film>(core_.get(), window_->GetWidth(), window_->GetHeight());
 
     core_->CreateBuffer(sizeof(CameraObject), grassland::graphics::BUFFER_TYPE_DYNAMIC, &camera_object_buffer_);
+    
+    // Create environment info buffer
+    struct EnvironmentInfoCPU {
+        int has_environment_map;
+        float environment_intensity;
+        float padding1;
+        float padding2;
+    };
+    core_->CreateBuffer(sizeof(EnvironmentInfoCPU), grassland::graphics::BUFFER_TYPE_DYNAMIC, &environment_info_buffer_);
+    EnvironmentInfoCPU env_info{};
+    env_info.has_environment_map = scene_->HasEnvironmentMap() ? 1 : 0;
+    env_info.environment_intensity = scene_->GetEnvironmentIntensity();
+    env_info.padding1 = 0.0f;
+    env_info.padding2 = 0.0f;
+    environment_info_buffer_->UploadData(&env_info, sizeof(EnvironmentInfoCPU));
     
     // Create hover info buffer
     core_->CreateBuffer(sizeof(HoverInfo), grassland::graphics::BUFFER_TYPE_DYNAMIC, &hover_info_buffer_);
@@ -333,6 +348,8 @@ void Application::OnInit() {
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_SAMPLER, 1);                // space14 - texture sampler
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space15 - textureinfo
     program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_STORAGE_BUFFER, 1);          // space16 - material IDs
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 1);                  // space17 - environment map
+    program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_UNIFORM_BUFFER, 1);          // space18 - environment info
     //program_->AddResourceBinding(grassland::graphics::RESOURCE_TYPE_IMAGE, 65536);              // space13 - texture array (bindless)
     program_->Finalize();
 }
@@ -351,6 +368,7 @@ void Application::OnClose() {
     color_image_.reset();
     entity_id_image_.reset();
     camera_object_buffer_.reset();
+    environment_info_buffer_.reset();
     hover_info_buffer_.reset();
     
     // Don't call TerminateImGui - let the window destructor handle it
@@ -997,6 +1015,17 @@ void Application::OnRender() {
 
 	command_context->CmdBindResources(13, texture_images, grassland::graphics::BIND_POINT_RAYTRACING);
 	command_context->CmdBindResources(14, { scene_->GetTextureSampler() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	
+	// Bind environment map (space17) - use dummy texture if no environment map
+	if (scene_->HasEnvironmentMap() && scene_->GetEnvironmentMap()) {
+	    command_context->CmdBindResources(17, { scene_->GetEnvironmentMap() }, grassland::graphics::BIND_POINT_RAYTRACING);
+	} else {
+	    // Use the first texture as dummy if no environment map
+	    if (!texture_images.empty()) {
+	        command_context->CmdBindResources(17, { texture_images[0] }, grassland::graphics::BIND_POINT_RAYTRACING);
+	    }
+	}
+	command_context->CmdBindResources(18, { environment_info_buffer_.get() }, grassland::graphics::BIND_POINT_RAYTRACING);
 
     // Dispatch multiple times per frame to increase effective SPP if requested
     // To simulate motion blur for objects, for each sample we interpolate each entity's transform
